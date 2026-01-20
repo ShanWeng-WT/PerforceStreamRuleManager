@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:PerforceStreamManager"
         mc:Ignorable="d"
-        Title="Perforce Stream Rule Manager" Height="700" Width="1000">
+        Title="Perforce Stream Rule Manager" Height="700" Width="1000"
+        Closing="Window_Closing">
     <Window.Resources>
         <Style TargetType="Button">
             <Setter Property="Margin" Value="5"/>

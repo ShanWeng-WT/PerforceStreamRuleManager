@@ -1,7 +1,9 @@
-﻿using System.Windows;
+using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 using PerforceStreamManager.ViewModels;
 using PerforceStreamManager.Models;
+using PerforceStreamManager.Views;
 
 namespace PerforceStreamManager;
 
@@ -10,6 +12,8 @@ namespace PerforceStreamManager;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private bool _forceClose = false;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -26,6 +30,50 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object sender, RoutedEventArgs e)
     {
-        Application.Current.Shutdown();
+        Close();
+    }
+
+    private void Window_Closing(object sender, CancelEventArgs e)
+    {
+        if (_forceClose)
+        {
+            return;
+        }
+
+        if (DataContext is MainViewModel viewModel && viewModel.HasUnsavedChanges)
+        {
+            var changes = viewModel.GetPendingChanges();
+            
+            if (changes.Count > 0)
+            {
+                var dialog = new UnsavedChangesDialog(changes)
+                {
+                    Owner = this
+                };
+
+                dialog.ShowDialog();
+
+                switch (dialog.UserChoice)
+                {
+                    case UnsavedChangesResult.Save:
+                        // Execute the save command
+                        if (viewModel.SaveCommand.CanExecute(null))
+                        {
+                            viewModel.SaveCommand.Execute(null);
+                        }
+                        // Allow close to proceed
+                        break;
+
+                    case UnsavedChangesResult.DontSave:
+                        // Allow close without saving
+                        break;
+
+                    case UnsavedChangesResult.Cancel:
+                        // Cancel the close operation
+                        e.Cancel = true;
+                        break;
+                }
+            }
+        }
     }
 }

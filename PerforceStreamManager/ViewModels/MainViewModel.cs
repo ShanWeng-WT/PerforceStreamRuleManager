@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -25,6 +27,9 @@ namespace PerforceStreamManager.ViewModels
         private string _streamPathInput = "//depot/main";
         private string _connectionStatus = "Not Connected";
         private bool _hasUnsavedChanges;
+
+        // Tracks original rules per stream path for change detection
+        private readonly Dictionary<string, List<StreamRule>> _originalRulesPerStream = new();
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -323,13 +328,16 @@ namespace PerforceStreamManager.ViewModels
                 // Update UI
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // Clear existing hierarchy
+                    // Clear existing hierarchy and original rules tracking
                     StreamHierarchy.Clear();
+                    _originalRulesPerStream.Clear();
+                    HasUnsavedChanges = false;
 
-                    // Add to observable collection
+                    // Add to observable collection and store original rules
                     foreach (var node in hierarchy)
                     {
                         StreamHierarchy.Add(node);
+                        StoreOriginalRulesRecursive(node);
                     }
 
                     // Select the first stream if available
@@ -862,6 +870,101 @@ namespace PerforceStreamManager.ViewModels
             }
 
             return path;
+        }
+
+        /// <summary>
+        /// Recursively stores original rules for a stream node and all its children
+        /// </summary>
+        private void StoreOriginalRulesRecursive(StreamNode node)
+        {
+            if (node == null) return;
+
+            // Store a deep copy of local rules for this stream
+            _originalRulesPerStream[node.Path] = node.LocalRules
+                .Select(r => new StreamRule(r.Type, r.Path, r.RemapTarget, r.SourceStream))
+                .ToList();
+
+            // Recurse into children
+            foreach (var child in node.Children)
+            {
+                StoreOriginalRulesRecursive(child);
+            }
+        }
+
+        /// <summary>
+        /// Gets all pending rule changes across all streams in the hierarchy
+        /// </summary>
+        /// <returns>List of rule changes (added, modified, deleted)</returns>
+        public List<RuleChangeInfo> GetPendingChanges()
+        {
+            var changes = new List<RuleChangeInfo>();
+
+            foreach (var node in StreamHierarchy)
+            {
+                CollectChangesRecursive(node, changes);
+            }
+
+            return changes;
+        }
+
+        /// <summary>
+        /// Recursively collects changes for a stream node and all its children
+        /// </summary>
+        private void CollectChangesRecursive(StreamNode node, List<RuleChangeInfo> changes)
+        {
+            if (node == null) return;
+
+            // Get original rules for this stream
+            if (!_originalRulesPerStream.TryGetValue(node.Path, out var originalRules))
+            {
+                originalRules = new List<StreamRule>();
+            }
+
+            var currentRules = node.LocalRules;
+
+            // Find added rules (in current but not in original)
+            foreach (var current in currentRules)
+            {
+                bool existsInOriginal = originalRules.Any(o =>
+                    string.Equals(o.Type, current.Type, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(o.Path, current.Path, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(o.RemapTarget ?? "", current.RemapTarget ?? "", StringComparison.OrdinalIgnoreCase));
+
+                if (!existsInOriginal)
+                {
+                    changes.Add(new RuleChangeInfo
+                    {
+                        ChangeType = RuleChangeType.Added,
+                        StreamPath = node.Path,
+                        Rule = current
+                    });
+                }
+            }
+
+            // Find deleted rules (in original but not in current)
+            foreach (var original in originalRules)
+            {
+                bool existsInCurrent = currentRules.Any(c =>
+                    string.Equals(c.Type, original.Type, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(c.Path, original.Path, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(c.RemapTarget ?? "", original.RemapTarget ?? "", StringComparison.OrdinalIgnoreCase));
+
+                if (!existsInCurrent)
+                {
+                    changes.Add(new RuleChangeInfo
+                    {
+                        ChangeType = RuleChangeType.Deleted,
+                        StreamPath = node.Path,
+                        Rule = original
+                    });
+                }
+            }
+
+            // Recurse into children
+            foreach (var child in node.Children)
+            {
+                CollectChangesRecursive(child, changes);
+            }
         }
 
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
