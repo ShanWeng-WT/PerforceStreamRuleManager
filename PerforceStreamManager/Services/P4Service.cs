@@ -726,30 +726,20 @@ namespace PerforceStreamManager.Services
                 string clientName = _connection?.Client?.Name ?? "unknown";
                 _loggingService.LogInfo($"Writing to depot file: {depotPath} using client: {clientName}");
 
+                // Ensure the connection is using the correct client
+                if (_connection!.Client != null && !string.IsNullOrWhiteSpace(clientName) && clientName != "unknown")
+                {
+                    _repository!.Connection.Client = _repository.GetClient(clientName);
+                    _loggingService.LogInfo($"Set repository client to: {_repository.Connection.Client.Name}");
+                }
+
                 // 1. Resolve Local Path
                 string? localPath = null;
                 try
                 {
                     // Use 'where' command to find local path mapping
-                    // We explicitly pass the client name to ensure the correct context
-                    P4Command cmd;
-                    if (!string.IsNullOrWhiteSpace(_connection?.Client?.Name))
-                    {
-                        // p4 -c client where path
-                        cmd = new P4Command(_repository, "where", true, depotPath);
-                        // There isn't a direct way to pass -c to P4Command constructor as a global option easily 
-                        // without restructuring, but we can rely on the connection's client if we ensure it's set.
-                        // However, P4API.NET should respect _connection.Client.Name.
-                        // To be absolutely safe, we can try to set the client in the connection again or 
-                        // trust the AutoDetect logic.
-                        
-                        // Actually, let's just log what we have.
-                    }
-                    else
-                    {
-                        cmd = new P4Command(_repository, "where", true, depotPath);
-                    }
-                    
+                    _loggingService.LogInfo($"Running 'p4 where {depotPath}' with client {clientName}");
+                    P4Command cmd = new P4Command(_repository, "where", true, depotPath);
                     var result = cmd.Run();
 
                     if (result != null && result.TaggedOutput != null && result.TaggedOutput.Count > 0)
@@ -838,15 +828,23 @@ namespace PerforceStreamManager.Services
                 bool exists = false;
                 try
                 {
-                    var md = _repository!.GetFileMetaData(new Options(), fileSpec);
+                    var mdOptions = new GetFileMetaDataCmdOptions(
+                        GetFileMetadataCmdFlags.None,
+                        null, null, -1, null, null, null
+                    );
+                    var md = _repository!.GetFileMetaData(new List<FileSpec> { fileSpec }, mdOptions);
                     if (md != null && md.Count > 0 && md[0] != null && 
                         md[0].HeadAction != FileAction.Delete && 
                         md[0].HeadAction != FileAction.MoveDelete)
                     {
                         exists = true;
+                        _loggingService.LogInfo($"File exists in depot at revision {md[0].HeadRev}");
                     }
                 }
-                catch { /* Ignore, assume doesn't exist */ }
+                catch (Exception ex)
+                { 
+                    _loggingService.LogInfo($"File not found in depot (will add): {ex.Message}");
+                }
 
                 try 
                 {
@@ -854,11 +852,20 @@ namespace PerforceStreamManager.Services
                     {
                         // Sync the file first to ensure we are editing the latest revision
                         // This prevents "must resolve" errors if we are out of date
+                        _loggingService.LogInfo("Syncing file before edit...");
                         _connection!.Client.SyncFiles(new List<FileSpec> { fileSpec }, null);
 
                         var editOptions = new EditCmdOptions(EditFilesCmdFlags.None, changelist.Id, null);
-                        _connection.Client.EditFiles(new List<FileSpec> { fileSpec }, editOptions);
-                        isOpenForEdit = true;
+                        var editedFiles = _connection.Client.EditFiles(new List<FileSpec> { fileSpec }, editOptions);
+                        if (editedFiles != null && editedFiles.Count > 0)
+                        {
+                            _loggingService.LogInfo($"Successfully opened file for edit: {editedFiles[0].DepotPath}");
+                            isOpenForEdit = true;
+                        }
+                        else
+                        {
+                            _loggingService.LogInfo("EditFiles returned no results.");
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -869,8 +876,14 @@ namespace PerforceStreamManager.Services
                 if (!isOpenForEdit)
                 {
                     // Try Add
+                    _loggingService.LogInfo("Opening file for add...");
                     var addOptions = new AddFilesCmdOptions(AddFilesCmdFlags.None, changelist.Id, null);
-                    _connection!.Client.AddFiles(new List<FileSpec> { fileSpec }, addOptions);
+                    var addedFiles = _connection!.Client.AddFiles(new List<FileSpec> { fileSpec }, addOptions);
+                    if (addedFiles == null || addedFiles.Count == 0)
+                    {
+                        throw new Exception($"Failed to open file for add: No files were opened. Check workspace mapping for {depotPath}");
+                    }
+                    _loggingService.LogInfo($"Successfully opened file for add: {addedFiles[0].DepotPath}");
                 }
 
                 // 5. Write Content to Local File
@@ -884,11 +897,41 @@ namespace PerforceStreamManager.Services
                     }
                 }
 
+                _loggingService.LogInfo($"Writing content to local file: {localPath}");
                 System.IO.File.WriteAllText(localPath, content);
 
-                // 6. Submit
+                // 6. Verify file is in changelist before submitting
+                _loggingService.LogInfo($"Verifying file is opened in changelist {changelist.Id}...");
+                var openedCmd = new P4Command(_repository!, "opened", true, "-c", changelist.Id.ToString(), depotPath);
+                var openedResult = openedCmd.Run();
+                
+                bool fileIsOpened = false;
+                if (openedResult != null && openedResult.TaggedOutput != null && openedResult.TaggedOutput.Count > 0)
+                {
+                    fileIsOpened = true;
+                    string openedFile = openedResult.TaggedOutput[0].ContainsKey("depotFile") ? openedResult.TaggedOutput[0]["depotFile"] : depotPath;
+                    _loggingService.LogInfo($"File is opened: {openedFile}");
+                }
+                
+                if (!fileIsOpened)
+                {
+                    throw new Exception($"File {depotPath} is not opened in changelist {changelist.Id}. Cannot submit. Check that the file is mapped in your workspace.");
+                }
+                
+                _loggingService.LogInfo($"File verified in changelist {changelist.Id}. Submitting...");
+                
+                // Submit
                 var submitOptions = new SubmitCmdOptions(SubmitFilesCmdFlags.None, changelist.Id, null, null, null);
-                _connection!.Client.SubmitFiles(submitOptions, null);
+                var submitResults = _connection!.Client.SubmitFiles(submitOptions, null);
+                
+                if (submitResults != null && submitResults.Files != null)
+                {
+                    _loggingService.LogInfo($"Successfully submitted {submitResults.Files.Count} file(s)");
+                }
+                else
+                {
+                    throw new Exception("Submit returned no results");
+                }
                 
                 _loggingService.LogInfo($"Successfully submitted {depotPath}");
             }
