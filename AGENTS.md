@@ -4,8 +4,99 @@
 WPF desktop application for managing Perforce stream hierarchies using P4API.NET. Built with .NET 8.0, MVVM pattern, and NUnit for testing.
 
 ## Documentation
-- **Requirements**: `.kiro/specs/perforce-stream-manager/requirements.md`
-- **Design Specs**: `.kiro/specs/perforce-stream-manager/design.md`
+- **Requirements**: `.opencode/specs/perforce-stream-manager/requirements.md`
+- **Design Specs**: `.opencode/specs/perforce-stream-manager/design.md`
+- **Subagents**: `.opencode/subagents/` - Specialized domain experts
+
+## Subagent Auto-Orchestration
+
+**IMPORTANT**: When tasks are requested, automatically delegate to specialized subagents by reading the appropriate file and following its instructions. This ensures consistent, expert-level implementation across all domains.
+
+### Auto-Delegation Rules
+
+Apply these rules automatically based on the task type:
+
+**XAML/UI Tasks** → Read `.opencode/subagents/wpf-ui-designer.md`
+- Creating/editing `.xaml` files (MainWindow, dialogs, user controls)
+- Implementing data binding (TwoWay, OneWay, UpdateSourceTrigger)
+- Designing TreeView/DataGrid layouts with HierarchicalDataTemplate
+- Creating WPF dialogs and windows
+- Implementing INotifyPropertyChanged in Views
+
+**Perforce Integration Tasks** → Read `.opencode/subagents/p4-integration-specialist.md`
+- Implementing `P4Service` methods
+- Stream operations (GetStream, GetStreamHierarchy, GetStreamRules)
+- Depot file operations (ReadDepotFile, WriteDepotFile)
+- P4API.NET integration and connection management
+- Stream hierarchy building algorithms
+- Handling P4Exceptions
+
+**ViewModel/MVVM Tasks** → Read `.opencode/subagents/mvvm-architect.md`
+- Creating ViewModels (MainViewModel, RuleViewModel, HistoryViewModel)
+- Implementing INotifyPropertyChanged and PropertyChanged events
+- Creating RelayCommand and ICommand implementations
+- ObservableCollection setup and management
+- Command CanExecute logic
+- Async operations in ViewModels
+
+**Testing Tasks** → Read `.opencode/subagents/test-generator.md`
+- Writing NUnit unit tests for services/ViewModels
+- Creating property-based tests with FsCheck (all 19 properties)
+- Test fixture setup and teardown
+- Creating mock implementations (MockP4Service)
+- Test coverage analysis
+- Integration tests
+
+**JSON/Data Persistence Tasks** → Read `.opencode/subagents/json-data-manager.md`
+- Implementing `SnapshotService` (CreateSnapshot, SaveSnapshot, LoadHistory)
+- Implementing `SettingsService` (LoadSettings, SaveSettings)
+- JSON serialization with System.Text.Json
+- Round-trip validation
+- Retention policy implementation
+- DateTime handling
+
+**Error Handling/Logging Tasks** → Read `.opencode/subagents/error-handler.md`
+- Implementing `LoggingService`
+- Creating custom exception types (ConnectionException, AuthenticationException)
+- Error message design (user-friendly messages)
+- Audit trail implementation (LogAudit)
+- Global exception handlers (App.xaml.cs)
+- P4Exception categorization and handling
+
+**Debugging/Diagnostics Tasks** → Read `.opencode/subagents/debugger.md`
+- Diagnosing binding failures ("TreeView not displaying", "UI not updating")
+- Investigating P4Exception errors (connection timeout, authentication failures)
+- Fixing UI freezes and performance bottlenecks
+- Debugging PropertyChanged and command CanExecute issues
+- Detecting memory leaks and disposal problems
+- Troubleshooting async/threading issues (cross-thread violations)
+- Adding diagnostic instrumentation and logging
+- Performance profiling and optimization
+
+### Multi-Domain Tasks
+
+For complex features spanning multiple domains, coordinate subagents in sequence:
+
+**Example: "Implement Load Stream Hierarchy Feature"**
+1. **p4-integration-specialist**: Implement `P4Service.GetStreamHierarchy()`
+2. **error-handler**: Add error handling and logging to the method
+3. **mvvm-architect**: Create `LoadStreamCommand` in `MainViewModel`
+4. **wpf-ui-designer**: Add TreeView to MainWindow.xaml with proper binding
+5. **test-generator**: Create unit tests and property-based tests
+
+**Example: "Debug TreeView Not Displaying Data"**
+1. **debugger**: Diagnose the issue (binding, DataContext, PropertyChanged)
+2. **wpf-ui-designer**: Fix XAML binding if needed
+3. **mvvm-architect**: Fix ViewModel PropertyChanged if needed
+4. **test-generator**: Add test to prevent regression
+
+### Orchestration Priority
+
+1. **Read the subagent file** for the primary domain
+2. **Follow all patterns and examples** in the subagent specification
+3. **Apply error handling** using error-handler patterns
+4. **Coordinate with other subagents** as needed for dependencies
+5. **Reference requirements/design docs** for context
 
 ## Build & Test Commands
 
