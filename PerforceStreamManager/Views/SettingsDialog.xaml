@@ -56,8 +56,8 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         
-                        <Label Grid.Row="0" Grid.Column="0" Content="Depot Path:"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Name="HistoryPathTextBox"/>
+<Label Grid.Row="0" Grid.Column="0" Content="Depot Path:"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Name="HistoryPathTextBox" IsReadOnly="True"/>
                     </Grid>
                 </GroupBox>
                 
