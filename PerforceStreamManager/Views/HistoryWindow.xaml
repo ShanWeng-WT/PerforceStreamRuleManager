@@ -1,0 +1,144 @@
+<Window x:Class="PerforceStreamManager.Views.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Snapshot History" Height="600" Width="900"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Stream Info -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{Binding StreamPath, StringFormat='Stream: {0}'}" 
+                       FontWeight="Bold" 
+                       FontSize="14"/>
+        </StackPanel>
+        
+        <!-- Main Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Timeline ListView -->
+            <GroupBox Grid.Column="0" Header="Snapshot Timeline">
+                <DockPanel>
+                    <Button DockPanel.Dock="Bottom" 
+                            Content="Restore Selected" 
+                            Command="{Binding RestoreSnapshotCommand}"
+                            Margin="0,5,0,0"/>
+                    <ListView ItemsSource="{Binding Snapshots}" 
+                              SelectedItem="{Binding SelectedSnapshot}">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Date" 
+                                                DisplayMemberBinding="{Binding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" 
+                                                Width="140"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </GroupBox>
+            
+            <!-- Splitter -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
+            
+            <!-- Details and Comparison Panel -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="200"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Snapshot Details -->
+                <GroupBox Grid.Row="0" Header="Snapshot Details" Margin="0,0,0,10">
+                    <StackPanel Margin="10">
+                        <TextBlock Text="{Binding SelectedSnapshot.Timestamp, StringFormat='Timestamp: {0:yyyy-MM-dd HH:mm:ss}'}" 
+                                   Margin="0,0,0,5"/>
+                        <TextBlock Text="{Binding SelectedSnapshot.CreatedBy, StringFormat='Created By: {0}'}" 
+                                   Margin="0,0,0,5"/>
+                        <TextBlock Text="{Binding SelectedSnapshot.Description, StringFormat='Description: {0}'}" 
+                                   Margin="0,0,0,5"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </GroupBox>
+                
+                <!-- Snapshot Rules -->
+                <GroupBox Grid.Row="1" Header="Rules in Snapshot" Margin="0,0,0,10">
+                    <DataGrid ItemsSource="{Binding SelectedSnapshot.Rules}" 
+                              AutoGenerateColumns="False" 
+                              IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
+                            <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*"/>
+                            <DataGridTextColumn Header="Remap Target" Binding="{Binding RemapTarget}" Width="150"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </GroupBox>
+                
+                <!-- Comparison Controls -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,10">
+                    <Label Content="Compare with:"/>
+                    <ComboBox ItemsSource="{Binding Snapshots}" 
+                              SelectedItem="{Binding ComparisonSnapshot}"
+                              DisplayMemberPath="Timestamp"
+                              Width="200"
+                              Margin="5,0"/>
+                    <Button Content="Compare" 
+                            Command="{Binding CompareSnapshotsCommand}"
+                            Margin="10,0,0,0"
+                            Padding="15,5"/>
+                </StackPanel>
+                
+                <!-- Comparison Results -->
+                <GroupBox Grid.Row="3" Header="Comparison Results">
+                    <TabControl>
+                        <TabItem Header="Added Rules">
+                            <DataGrid ItemsSource="{Binding AddedRules}" 
+                                      AutoGenerateColumns="False" 
+                                      IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
+                                    <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*"/>
+                                    <DataGridTextColumn Header="Remap Target" Binding="{Binding RemapTarget}" Width="150"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Removed Rules">
+                            <DataGrid ItemsSource="{Binding RemovedRules}" 
+                                      AutoGenerateColumns="False" 
+                                      IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
+                                    <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*"/>
+                                    <DataGridTextColumn Header="Remap Target" Binding="{Binding RemapTarget}" Width="150"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Modified Rules">
+                            <DataGrid ItemsSource="{Binding ModifiedRules}" 
+                                      AutoGenerateColumns="False" 
+                                      IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Old Type" Binding="{Binding OldRule.Type}" Width="80"/>
+                                    <DataGridTextColumn Header="Old Path" Binding="{Binding OldRule.Path}" Width="*"/>
+                                    <DataGridTextColumn Header="New Type" Binding="{Binding NewRule.Type}" Width="80"/>
+                                    <DataGridTextColumn Header="New Path" Binding="{Binding NewRule.Path}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                    </TabControl>
+                </GroupBox>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
