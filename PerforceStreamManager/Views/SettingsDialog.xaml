@@ -23,7 +23,6 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120"/>
@@ -39,11 +38,10 @@
                         <Label Grid.Row="2" Grid.Column="0" Content="User:"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Name="UserTextBox" Margin="0,0,0,5"/>
                         
-                        <Label Grid.Row="3" Grid.Column="0" Content="Workspace:"/>
-                        <TextBox Grid.Row="3" Grid.Column="1" Name="WorkspaceTextBox" Margin="0,0,0,5"/>
+
                         
-                        <Label Grid.Row="4" Grid.Column="0" Content="Password:"/>
-                        <PasswordBox Grid.Row="4" Grid.Column="1" Name="PasswordBox" Margin="0,0,0,5"/>
+                        <Label Grid.Row="3" Grid.Column="0" Content="Password:"/>
+                        <PasswordBox Grid.Row="3" Grid.Column="1" Name="PasswordBox" Margin="0,0,0,5"/>
                     </Grid>
                 </GroupBox>
                 

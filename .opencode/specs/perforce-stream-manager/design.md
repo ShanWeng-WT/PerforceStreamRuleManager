@@ -237,7 +237,6 @@ class P4ConnectionSettings
     string Server { get; set; }
     string Port { get; set; }
     string User { get; set; }
-    string Workspace { get; set; }
 }
 
 class RetentionPolicy

@@ -72,11 +72,7 @@ namespace PerforceStreamManager.Services
                 _connection.UserName = settings.User;
                 _connection.Client = new Client();
                 
-                // Set client/workspace name if provided
-                if (!string.IsNullOrWhiteSpace(settings.Workspace))
-                {
-                    _connection.Client.Name = settings.Workspace;
-                }
+
                 
                 // Connect to the server
                 _connection.Connect(null);

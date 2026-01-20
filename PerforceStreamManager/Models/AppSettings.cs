@@ -52,10 +52,7 @@ namespace PerforceStreamManager.Models
         /// </summary>
         public string User { get; set; }
 
-        /// <summary>
-        /// Perforce client/workspace name
-        /// </summary>
-        public string? Workspace { get; set; }
+
 
         /// <summary>
         /// Perforce password (optional)

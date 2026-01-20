@@ -25,7 +25,7 @@ public partial class SettingsDialog : Window
         ServerTextBox.Text = _settings.Connection?.Server ?? string.Empty;
         PortTextBox.Text = _settings.Connection?.Port ?? string.Empty;
         UserTextBox.Text = _settings.Connection?.User ?? string.Empty;
-        WorkspaceTextBox.Text = _settings.Connection?.Workspace ?? string.Empty;
+
         PasswordBox.Password = _settings.Connection?.Password ?? string.Empty;
         
         // Populate history storage path
@@ -73,7 +73,6 @@ public partial class SettingsDialog : Window
             Server = ServerTextBox.Text,
             Port = PortTextBox.Text,
             User = UserTextBox.Text,
-            Workspace = WorkspaceTextBox.Text,
             Password = PasswordBox.Password
         };
         
