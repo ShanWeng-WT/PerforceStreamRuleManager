@@ -103,7 +103,7 @@ namespace PerforceStreamManager.Services
                 string jsonContent = JsonSerializer.Serialize(historyFile, options);
 
                 // Write to depot
-                string description = $"Snapshot created by {snapshot.CreatedBy}: {snapshot.Description ?? "No description"}";
+                string description = $"[{snapshot.CreatedBy}] Update Stream Rule: {snapshot.StreamPath}";
                 _p4Service.WriteDepotFile(historyFilePath, jsonContent, description);
             }
             catch (Exception ex)

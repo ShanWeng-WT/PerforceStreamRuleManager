@@ -1,11 +1,11 @@
-﻿<Window x:Class="PerforceStreamManager.MainWindow"
+<Window x:Class="PerforceStreamManager.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:PerforceStreamManager"
         mc:Ignorable="d"
-        Title="Perforce Stream Rule Manager" Height="600" Width="1000">
+        Title="Perforce Stream Rule Manager" Height="700" Width="1000">
     <Window.Resources>
         <Style TargetType="Button">
             <Setter Property="Margin" Value="5"/>
@@ -92,20 +92,54 @@
                                      Margin="5"/>
                     </StackPanel>
                     
-                    <!-- Rules DataGrid -->
-                    <DataGrid ItemsSource="{Binding DisplayedRules}" 
-                              SelectedItem="{Binding SelectedRule}"
-                              AutoGenerateColumns="False" 
-                              IsReadOnly="True"
-                              SelectionMode="Single"
-                              Margin="5">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Type" Binding="{Binding RuleType}" Width="80"/>
-                            <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*"/>
-                            <DataGridTextColumn Header="Remap Target" Binding="{Binding RemapTarget}" Width="200"/>
-                            <DataGridTextColumn Header="Source Stream" Binding="{Binding SourceStream}" Width="200"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <!-- Two DataGrids with GridSplitter -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Remap Rules Section -->
+                        <GroupBox Grid.Row="0" Header="Remap Rules" Margin="5">
+                            <DataGrid ItemsSource="{Binding DisplayedRemapRules}" 
+                                      SelectedItem="{Binding SelectedRule}"
+                                      AutoGenerateColumns="False" 
+                                      IsReadOnly="True"
+                                      SelectionMode="Single"
+                                      Margin="5">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding RuleType}" Width="80"/>
+                                    <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*"/>
+                                    <DataGridTextColumn Header="Remap Target" Binding="{Binding RemapTarget}" Width="200"/>
+                                    <DataGridTextColumn Header="Source Stream" Binding="{Binding SourceStream}" Width="200"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </GroupBox>
+                        
+                        <!-- GridSplitter for resizing -->
+                        <GridSplitter Grid.Row="1" 
+                                     Height="5" 
+                                     HorizontalAlignment="Stretch"
+                                     VerticalAlignment="Center"
+                                     Background="LightGray"/>
+                        
+                        <!-- Ignore Rules Section -->
+                        <GroupBox Grid.Row="2" Header="Ignore Rules" Margin="5">
+                            <DataGrid ItemsSource="{Binding DisplayedIgnoreRules}" 
+                                      SelectedItem="{Binding SelectedRule}"
+                                      AutoGenerateColumns="False" 
+                                      IsReadOnly="True"
+                                      SelectionMode="Single"
+                                      Margin="5">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding RuleType}" Width="80"/>
+                                    <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*"/>
+                                    <DataGridTextColumn Header="Source Stream" Binding="{Binding SourceStream}" Width="200"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </GroupBox>
+                    </Grid>
                 </DockPanel>
             </GroupBox>
         </Grid>

@@ -119,9 +119,14 @@ namespace PerforceStreamManager.ViewModels
         }
 
         /// <summary>
-        /// Collection of rules to display based on current view mode
+        /// Collection of remap rules to display based on current view mode
         /// </summary>
-        public ObservableCollection<RuleViewModel> DisplayedRules { get; }
+        public ObservableCollection<RuleViewModel> DisplayedRemapRules { get; }
+
+        /// <summary>
+        /// Collection of ignore rules to display based on current view mode
+        /// </summary>
+        public ObservableCollection<RuleViewModel> DisplayedIgnoreRules { get; }
 
         /// <summary>
         /// Current rule view mode (Local, Inherited, All)
@@ -206,7 +211,8 @@ namespace PerforceStreamManager.ViewModels
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
 
             StreamHierarchy = new ObservableCollection<StreamNode>();
-            DisplayedRules = new ObservableCollection<RuleViewModel>();
+            DisplayedRemapRules = new ObservableCollection<RuleViewModel>();
+            DisplayedIgnoreRules = new ObservableCollection<RuleViewModel>();
             _currentViewMode = RuleViewMode.All;
 
             LoadStreamCommand = new RelayCommand(LoadStreamHierarchy, CanLoadStream);
@@ -229,7 +235,8 @@ namespace PerforceStreamManager.ViewModels
             _snapshotService = new SnapshotService(_p4Service, loggingService);
             
             StreamHierarchy = new ObservableCollection<StreamNode>();
-            DisplayedRules = new ObservableCollection<RuleViewModel>();
+            DisplayedRemapRules = new ObservableCollection<RuleViewModel>();
+            DisplayedIgnoreRules = new ObservableCollection<RuleViewModel>();
             _currentViewMode = RuleViewMode.All;
 
             LoadStreamCommand = new RelayCommand(LoadStreamHierarchy, CanLoadStream);
@@ -347,7 +354,8 @@ namespace PerforceStreamManager.ViewModels
         /// </summary>
         private void RefreshRuleDisplay()
         {
-            DisplayedRules.Clear();
+            DisplayedRemapRules.Clear();
+            DisplayedIgnoreRules.Clear();
 
             if (SelectedStream == null)
             {
@@ -363,19 +371,28 @@ namespace PerforceStreamManager.ViewModels
                 _ => SelectedStream.GetAllRules()
             };
 
-            // Convert to RuleViewModel and add to collection
+            // Convert to RuleViewModel and partition by type
             foreach (var rule in rules)
             {
                 var ruleViewModel = new RuleViewModel
                 {
                     RuleType = rule.Type,
                     Path = rule.Path,
-                    RemapTarget = rule.RemapTarget,
-                    SourceStream = rule.SourceStream,
+                    RemapTarget = rule.RemapTarget ?? "",
+                    SourceStream = rule.SourceStream ?? "",
                     IsInherited = rule.SourceStream != SelectedStream.Path,
                     IsLocal = rule.SourceStream == SelectedStream.Path
                 };
-                DisplayedRules.Add(ruleViewModel);
+
+                // Partition into appropriate collection based on type (case-insensitive)
+                if (string.Equals(rule.Type, "remap", StringComparison.OrdinalIgnoreCase))
+                {
+                    DisplayedRemapRules.Add(ruleViewModel);
+                }
+                else if (string.Equals(rule.Type, "ignore", StringComparison.OrdinalIgnoreCase))
+                {
+                    DisplayedIgnoreRules.Add(ruleViewModel);
+                }
             }
         }
 

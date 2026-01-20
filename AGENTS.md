@@ -3,6 +3,12 @@
 ## Overview
 WPF desktop application for managing Perforce stream hierarchies using P4API.NET. Built with .NET 8.0, MVVM pattern, and NUnit for testing.
 
+## Communication Style Preferences
+- **Be concise**: Provide clear, direct answers without unnecessary elaboration
+- **No unsolicited guidance**: Do not provide "What Needs To Be Done Next", "Manual Testing Checklists", or "Context for Next Session" unless explicitly requested
+- **Answer what's asked**: If the user asks "What did we do?", summarize completed work only - don't add future recommendations
+- **Trust the user**: The user will ask for help when needed; avoid being overly prescriptive or verbose
+
 ## Documentation
 - **Requirements**: `.opencode/specs/perforce-stream-manager/requirements.md`
 - **Design Specs**: `.opencode/specs/perforce-stream-manager/design.md`
