@@ -7,17 +7,20 @@ namespace PerforceStreamManager.Views;
 public partial class SettingsDialog : Window
 {
     private readonly SettingsService _settingsService;
+    private readonly P4Service _p4Service;
     private AppSettings _settings;
     
-    public SettingsDialog(SettingsService settingsService)
+    public SettingsDialog(SettingsService settingsService, P4Service p4Service)
     {
         InitializeComponent();
         _settingsService = settingsService;
+        _p4Service = p4Service;
         
         LoadSettings();
+        UpdateConnectionStatus();
     }
     
-    private void LoadSettings()
+private void LoadSettings()
     {
         _settings = _settingsService.LoadSettings();
         
@@ -34,6 +37,99 @@ public partial class SettingsDialog : Window
         // Populate retention policy
         MaxSnapshotsTextBox.Text = _settings.Retention?.MaxSnapshots.ToString() ?? "50";
         MaxAgeDaysTextBox.Text = _settings.Retention?.MaxAgeDays.ToString() ?? "365";
+    }
+    
+    private void UpdateConnectionStatus()
+    {
+        if (_p4Service.IsConnected)
+        {
+            ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Lime;
+            ConnectionStatusText.Text = "Connected";
+        }
+        else
+        {
+            ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Red;
+            ConnectionStatusText.Text = "Not Connected";
+        }
+    }
+    
+    private void TestConnectionButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var testSettings = new P4ConnectionSettings
+            {
+                Server = ServerTextBox.Text,
+                Port = PortTextBox.Text,
+                User = UserTextBox.Text,
+                Password = PasswordBox.Password
+            };
+            
+            if (string.IsNullOrWhiteSpace(testSettings.Server) || 
+                string.IsNullOrWhiteSpace(testSettings.Port))
+            {
+                MessageBox.Show("Server and Port are required to test connection.", 
+                    "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            
+            TestConnectionButton.IsEnabled = false;
+            TestConnectionButton.Content = "Testing...";
+            
+            // Test connection in background thread
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    using (var testService = new P4Service(new LoggingService()))
+                    {
+                        testService.Connect(testSettings);
+                        var isConnected = testService.IsConnected;
+                        
+                        Dispatcher.Invoke(() =>
+                        {
+                            if (isConnected)
+                            {
+                                ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Lime;
+                                ConnectionStatusText.Text = "Connected";
+                                MessageBox.Show("Connection successful!", "Test Result", 
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                            }
+                            else
+                            {
+                                ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Red;
+                                ConnectionStatusText.Text = "Connection Failed";
+                                MessageBox.Show("Connection failed. Please check your settings.", "Test Result", 
+                                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Red;
+                        ConnectionStatusText.Text = "Connection Failed";
+                        MessageBox.Show($"Connection failed: {ex.Message}", "Test Result", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    });
+                }
+                finally
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        TestConnectionButton.IsEnabled = true;
+                        TestConnectionButton.Content = "Test Connection";
+                    });
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to test connection: {ex.Message}", "Error", 
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
     
     private void SaveButton_Click(object sender, RoutedEventArgs e)

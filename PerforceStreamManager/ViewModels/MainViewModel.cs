@@ -61,7 +61,7 @@ namespace PerforceStreamManager.ViewModels
             {
                 if (_streamPathInput != value)
                 {
-                    _streamPathInput = value;
+                    _streamPathInput = value.TrimEnd('/');
                     OnPropertyChanged();
                     // Force re-evaluation of CanLoadStream
                     CommandManager.InvalidateRequerySuggested();
@@ -735,7 +735,7 @@ namespace PerforceStreamManager.ViewModels
         {
             try
             {
-                var settingsDialog = new Views.SettingsDialog(_settingsService);
+                var settingsDialog = new Views.SettingsDialog(_settingsService, _p4Service);
                 if (settingsDialog.ShowDialog() == true)
                 {
                     InitializeConnection();
