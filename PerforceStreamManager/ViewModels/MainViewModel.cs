@@ -276,6 +276,9 @@ namespace PerforceStreamManager.ViewModels
                     ConnectionStatus = $"Connecting to {settings.Connection.Server}...";
                     _p4Service.Connect(settings.Connection);
                     ConnectionStatus = $"Connected to {settings.Connection.Server} ({settings.Connection.User})";
+                    
+                    // Force command manager to re-evaluate CanExecute after successful connection
+                    CommandManager.InvalidateRequerySuggested();
                 }
                 else
                 {
@@ -287,9 +290,6 @@ namespace PerforceStreamManager.ViewModels
                 ConnectionStatus = "Connection Failed";
                 Console.WriteLine($"Failed to connect: {ex.Message}");
             }
-            
-            // Force command manager to re-evaluate CanExecute
-            CommandManager.InvalidateRequerySuggested();
         }
 
         /// <summary>
