@@ -120,12 +120,7 @@ namespace PerforceStreamManager.Services
                     Port = "1666",
                     User = Environment.UserName
                 },
-                HistoryStoragePath = "stream-history",
-                Retention = new RetentionPolicy
-                {
-                    MaxSnapshots = 50,
-                    MaxAgeDays = 365
-                }
+                HistoryStoragePath = "stream-history"
             };
         }
     }

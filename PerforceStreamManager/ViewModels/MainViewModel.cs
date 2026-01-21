@@ -195,11 +195,6 @@ namespace PerforceStreamManager.ViewModels
         public ICommand SaveCommand { get; }
 
         /// <summary>
-        /// Command to open history viewer
-        /// </summary>
-        public ICommand OpenHistoryCommand { get; }
-
-        /// <summary>
         /// Command to open settings dialog
         /// </summary>
         public ICommand OpenSettingsCommand { get; }
@@ -225,7 +220,6 @@ namespace PerforceStreamManager.ViewModels
             EditRuleCommand = new RelayCommand(EditRule, CanEditRule);
             DeleteRuleCommand = new RelayCommand(DeleteRule, CanDeleteRule);
             SaveCommand = new RelayCommand(Save, CanSave);
-            OpenHistoryCommand = new RelayCommand(OpenHistory, CanOpenHistory);
             OpenSettingsCommand = new RelayCommand(OpenSettings);
             OpenLogFileCommand = new RelayCommand(OpenLogFile);
 
@@ -249,7 +243,6 @@ namespace PerforceStreamManager.ViewModels
             EditRuleCommand = new RelayCommand(EditRule, CanEditRule);
             DeleteRuleCommand = new RelayCommand(DeleteRule, CanDeleteRule);
             SaveCommand = new RelayCommand(Save, CanSave);
-            OpenHistoryCommand = new RelayCommand(OpenHistory, CanOpenHistory);
             OpenSettingsCommand = new RelayCommand(OpenSettings);
             OpenLogFileCommand = new RelayCommand(OpenLogFile);
 
@@ -436,10 +429,6 @@ namespace PerforceStreamManager.ViewModels
 
                 // Refresh the display
                 RefreshRuleDisplay();
-                
-                // Optional: Provide feedback (can be removed if too intrusive)
-                // System.Windows.MessageBox.Show("Rule added. Click 'Save' to apply changes.", "Rule Added", 
-                //     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             }
         }
 
@@ -621,18 +610,12 @@ namespace PerforceStreamManager.ViewModels
                 return;
             }
 
-            // Parameter should be a tuple of (createdBy, description)
-            string createdBy = Environment.UserName;
-            string? description = null;
+            // Parameter can be a description string
+            string description = $"[{Environment.UserName}] Update Stream Rule: {StreamPathInput}";
 
-            if (parameter is (string user, string desc))
+            if (parameter is string desc && !string.IsNullOrWhiteSpace(desc))
             {
-                createdBy = user;
                 description = desc;
-            }
-            else if (parameter is string userOnly)
-            {
-                createdBy = userOnly;
             }
 
             RunWithProgressAsync(async () =>
@@ -646,7 +629,7 @@ namespace PerforceStreamManager.ViewModels
                     _p4Service.UpdateStreamRules(streamNode.Path, rules);
 
                     // Create snapshot
-                    var snapshot = _snapshotService.CreateSnapshot(streamNode, createdBy, description);
+                    var snapshot = _snapshotService.CreateSnapshot(streamNode);
 
                     // Force StreamPath to match StreamPathInput per requirement
                     if (!string.IsNullOrWhiteSpace(StreamPathInput))
@@ -666,11 +649,10 @@ namespace PerforceStreamManager.ViewModels
                     }
 
                     // Try to auto-detect workspace for this stream if one isn't explicitly set
-                    // This ensures we can resolve local paths for 'p4 where'
                     _p4Service.AutoDetectAndSwitchWorkspace(StreamPathInput);
 
-                    // Save snapshot
-                    _snapshotService.SaveSnapshot(snapshot, storagePath);
+                    // Save snapshot - P4 versioning will track history
+                    _snapshotService.SaveSnapshot(snapshot, storagePath, description);
                 });
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -686,40 +668,6 @@ namespace PerforceStreamManager.ViewModels
         /// Determines if changes can be saved
         /// </summary>
         private bool CanSave(object? parameter)
-        {
-            return _p4Service.IsConnected && SelectedStream != null;
-        }
-
-        /// <summary>
-        /// Opens the history viewer for the selected stream
-        /// </summary>
-        /// <param name="parameter">Optional parameter</param>
-        private void OpenHistory(object? parameter)
-        {
-            try
-            {
-                if (SelectedStream == null)
-                {
-                    System.Windows.MessageBox.Show("No stream selected", "Error", 
-                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    return;
-                }
-
-                var historyViewModel = new HistoryViewModel(_snapshotService, _settingsService, StreamPathInput);
-                var historyWindow = new Views.HistoryWindow(historyViewModel);
-                historyWindow.ShowDialog();
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show($"Error opening history: {ex.Message}", "Error", 
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-            }
-        }
-
-        /// <summary>
-        /// Determines if history can be opened
-        /// </summary>
-        private bool CanOpenHistory(object? parameter)
         {
             return _p4Service.IsConnected && SelectedStream != null;
         }

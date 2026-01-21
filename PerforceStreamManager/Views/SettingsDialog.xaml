@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Settings" Height="450" Width="500"
+        Title="Settings" Height="350" Width="500"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize">
     <Grid Margin="10">
@@ -15,7 +15,7 @@
 
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="0,0,10,0">
-<!-- Perforce Connection Settings -->
+                <!-- Perforce Connection Settings -->
                 <GroupBox Header="Perforce Connection" Margin="0,0,0,10">
                     <Grid Margin="10">
                         <Grid.RowDefinitions>
@@ -54,10 +54,11 @@
                     </Grid>
                 </GroupBox>
                 
-                <!-- History Storage Settings -->
-                <GroupBox Header="History Storage" Margin="0,0,0,10">
+                <!-- Snapshot Storage Settings -->
+                <GroupBox Header="Snapshot Storage" Margin="0,0,0,10">
                     <Grid Margin="10">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
@@ -65,28 +66,12 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         
-<Label Grid.Row="0" Grid.Column="0" Content="Depot Path:"/>
+                        <Label Grid.Row="0" Grid.Column="0" Content="Depot Path:"/>
                         <TextBox Grid.Row="0" Grid.Column="1" Name="HistoryPathTextBox" IsReadOnly="True"/>
-                    </Grid>
-                </GroupBox>
-                
-                <!-- Retention Policy Settings -->
-                <GroupBox Header="Retention Policy" Margin="0,0,0,10">
-                    <Grid Margin="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
                         
-                        <Label Grid.Row="0" Grid.Column="0" Content="Max Snapshots:"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Name="MaxSnapshotsTextBox" Margin="0,0,0,5"/>
-                        
-                        <Label Grid.Row="1" Grid.Column="0" Content="Max Age (days):"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Name="MaxAgeDaysTextBox"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" 
+                                   Text="History is tracked by P4's file versioning." 
+                                   FontStyle="Italic" Foreground="Gray" Margin="0,5,0,0"/>
                     </Grid>
                 </GroupBox>
             </StackPanel>

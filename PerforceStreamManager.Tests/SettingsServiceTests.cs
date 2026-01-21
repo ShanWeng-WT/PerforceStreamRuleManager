@@ -48,13 +48,10 @@ namespace PerforceStreamManager.Tests
             // Assert
             Assert.IsNotNull(settings);
             Assert.IsNotNull(settings.Connection);
-            Assert.IsNotNull(settings.Retention);
-            Assert.AreEqual("localhost", settings.Connection.Server);
-            Assert.AreEqual("1666", settings.Connection.Port);
-            Assert.AreEqual(Environment.UserName, settings.Connection.User);
-            Assert.AreEqual("//depot/stream-history", settings.HistoryStoragePath);
-            Assert.AreEqual(50, settings.Retention.MaxSnapshots);
-            Assert.AreEqual(365, settings.Retention.MaxAgeDays);
+            Assert.That(settings.Connection.Server, Is.EqualTo("localhost"));
+            Assert.That(settings.Connection.Port, Is.EqualTo("1666"));
+            Assert.That(settings.Connection.User, Is.EqualTo(Environment.UserName));
+            Assert.That(settings.HistoryStoragePath, Is.EqualTo("stream-history"));
         }
 
         [Test]
@@ -69,12 +66,7 @@ namespace PerforceStreamManager.Tests
                     Port = "1234",
                     User = "testuser"
                 },
-                HistoryStoragePath = "//depot/test-history",
-                Retention = new RetentionPolicy
-                {
-                    MaxSnapshots = 100,
-                    MaxAgeDays = 180
-                }
+                HistoryStoragePath = "//depot/test-history"
             };
 
             // Act
@@ -96,12 +88,7 @@ namespace PerforceStreamManager.Tests
                     Port = "1234",
                     User = "testuser"
                 },
-                HistoryStoragePath = "//depot/test-history",
-                Retention = new RetentionPolicy
-                {
-                    MaxSnapshots = 100,
-                    MaxAgeDays = 180
-                }
+                HistoryStoragePath = "//depot/test-history"
             };
 
             // Act
@@ -110,12 +97,10 @@ namespace PerforceStreamManager.Tests
 
             // Assert
             Assert.IsNotNull(loadedSettings);
-            Assert.AreEqual(originalSettings.Connection.Server, loadedSettings.Connection.Server);
-            Assert.AreEqual(originalSettings.Connection.Port, loadedSettings.Connection.Port);
-            Assert.AreEqual(originalSettings.Connection.User, loadedSettings.Connection.User);
-            Assert.AreEqual(originalSettings.HistoryStoragePath, loadedSettings.HistoryStoragePath);
-            Assert.AreEqual(originalSettings.Retention.MaxSnapshots, loadedSettings.Retention.MaxSnapshots);
-            Assert.AreEqual(originalSettings.Retention.MaxAgeDays, loadedSettings.Retention.MaxAgeDays);
+            Assert.That(loadedSettings.Connection.Server, Is.EqualTo(originalSettings.Connection.Server));
+            Assert.That(loadedSettings.Connection.Port, Is.EqualTo(originalSettings.Connection.Port));
+            Assert.That(loadedSettings.Connection.User, Is.EqualTo(originalSettings.Connection.User));
+            Assert.That(loadedSettings.HistoryStoragePath, Is.EqualTo(originalSettings.HistoryStoragePath));
         }
 
         [Test]

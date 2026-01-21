@@ -23,9 +23,7 @@
                 <Separator/>
                 <MenuItem Header="E_xit" Click="Exit_Click"/>
             </MenuItem>
-            <MenuItem Header="_View">
-                <MenuItem Header="_History" Command="{Binding OpenHistoryCommand}"/>
-            </MenuItem>
+
         </Menu>
         
         <!-- Toolbar -->

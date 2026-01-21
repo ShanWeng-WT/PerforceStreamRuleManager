@@ -20,7 +20,7 @@ public partial class SettingsDialog : Window
         UpdateConnectionStatus();
     }
     
-private void LoadSettings()
+    private void LoadSettings()
     {
         _settings = _settingsService.LoadSettings();
         
@@ -28,15 +28,10 @@ private void LoadSettings()
         ServerTextBox.Text = _settings.Connection?.Server ?? string.Empty;
         PortTextBox.Text = _settings.Connection?.Port ?? string.Empty;
         UserTextBox.Text = _settings.Connection?.User ?? string.Empty;
-
         PasswordBox.Password = _settings.Connection?.Password ?? string.Empty;
         
-        // Populate history storage path
+        // Populate snapshot storage path
         HistoryPathTextBox.Text = _settings.HistoryStoragePath ?? string.Empty;
-        
-        // Populate retention policy
-        MaxSnapshotsTextBox.Text = _settings.Retention?.MaxSnapshots.ToString() ?? "50";
-        MaxAgeDaysTextBox.Text = _settings.Retention?.MaxAgeDays.ToString() ?? "365";
     }
     
     private void UpdateConnectionStatus()
@@ -149,20 +144,6 @@ private void LoadSettings()
             return;
         }
         
-        if (!int.TryParse(MaxSnapshotsTextBox.Text, out int maxSnapshots) || maxSnapshots <= 0)
-        {
-            MessageBox.Show("Max Snapshots must be a positive integer.", "Validation Error", 
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        
-        if (!int.TryParse(MaxAgeDaysTextBox.Text, out int maxAgeDays) || maxAgeDays <= 0)
-        {
-            MessageBox.Show("Max Age Days must be a positive integer.", "Validation Error", 
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        
         // Update settings object
         _settings.Connection = new P4ConnectionSettings
         {
@@ -173,12 +154,6 @@ private void LoadSettings()
         };
         
         _settings.HistoryStoragePath = HistoryPathTextBox.Text;
-        
-        _settings.Retention = new RetentionPolicy
-        {
-            MaxSnapshots = maxSnapshots,
-            MaxAgeDays = maxAgeDays
-        };
         
         // Save settings
         try

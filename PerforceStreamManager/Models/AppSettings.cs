@@ -11,14 +11,10 @@ namespace PerforceStreamManager.Models
         public P4ConnectionSettings Connection { get; set; }
 
         /// <summary>
-        /// Depot path where snapshot history files are stored
+        /// Depot path where snapshot files are stored.
+        /// P4's versioning provides the history.
         /// </summary>
         public string HistoryStoragePath { get; set; }
-
-        /// <summary>
-        /// Retention policy for snapshots
-        /// </summary>
-        public RetentionPolicy Retention { get; set; }
 
         /// <summary>
         /// Last used stream path
@@ -28,7 +24,7 @@ namespace PerforceStreamManager.Models
         public AppSettings()
         {
             Connection = new P4ConnectionSettings();
-            Retention = new RetentionPolicy();
+            HistoryStoragePath = "stream-history";
         }
     }
 
@@ -52,8 +48,6 @@ namespace PerforceStreamManager.Models
         /// </summary>
         public string User { get; set; }
 
-
-
         /// <summary>
         /// Perforce password (optional)
         /// </summary>
@@ -61,28 +55,9 @@ namespace PerforceStreamManager.Models
 
         public P4ConnectionSettings()
         {
-        }
-    }
-
-    /// <summary>
-    /// Retention policy for managing snapshot history
-    /// </summary>
-    public class RetentionPolicy
-    {
-        /// <summary>
-        /// Maximum number of snapshots to keep per stream
-        /// </summary>
-        public int MaxSnapshots { get; set; }
-
-        /// <summary>
-        /// Maximum age of snapshots in days
-        /// </summary>
-        public int MaxAgeDays { get; set; }
-
-        public RetentionPolicy()
-        {
-            MaxSnapshots = 50; // Default value
-            MaxAgeDays = 365; // Default value
+            Server = "";
+            Port = "";
+            User = "";
         }
     }
 }
