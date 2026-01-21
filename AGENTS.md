@@ -32,10 +32,10 @@ dotnet test --filter "FullyQualifiedName~SettingsServiceTests"
 ## Project Structure
 ```
 PerforceStreamManager/
-├── Models/               # Data models (StreamNode, StreamRule, AppSettings, Snapshot)
+├── Models/               # Data models (StreamNode, StreamRule, AppSettings, Snapshot, FileRevisionInfo)
 ├── Services/            # Business logic (P4Service, SnapshotService, SettingsService, LoggingService)
 ├── ViewModels/          # MVVM ViewModels with INotifyPropertyChanged
-├── Views/               # XAML views and code-behind
+├── Views/               # XAML views and code-behind (RuleDialog, SettingsDialog, RestoreDialog, etc.)
 ├── App.xaml[.cs]        # Application entry point
 └── MainWindow.xaml[.cs] # Main application window
 

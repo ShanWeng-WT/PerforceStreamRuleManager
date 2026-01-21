@@ -100,13 +100,53 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
+        /// Loads a snapshot from JSON content
+        /// </summary>
+        /// <param name="jsonContent">JSON string containing the snapshot</param>
+        /// <returns>Deserialized Snapshot object</returns>
+        /// <exception cref="ArgumentException">Thrown when jsonContent is null or empty</exception>
+        /// <exception cref="Exception">Thrown when deserialization fails</exception>
+        public Snapshot LoadSnapshot(string jsonContent)
+        {
+            if (string.IsNullOrWhiteSpace(jsonContent))
+                throw new ArgumentException("JSON content cannot be null or empty", nameof(jsonContent));
+
+            try
+            {
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var snapshot = JsonSerializer.Deserialize<Snapshot>(jsonContent, options);
+                
+                if (snapshot == null)
+                    throw new Exception("Deserialization returned null");
+
+                _loggingService.LogInfo($"Loaded snapshot for stream: {snapshot.StreamPath} with {snapshot.Rules.Count} rules");
+                return snapshot;
+            }
+            catch (JsonException ex)
+            {
+                _loggingService.LogError(ex, "LoadSnapshot - JSON parsing error");
+                throw new Exception($"Failed to parse snapshot JSON: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError(ex, "LoadSnapshot");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Generates the depot file path for a stream's snapshot file
         /// </summary>
         /// <param name="streamPath">Full depot path of the stream (e.g., //depot/main)</param>
         /// <param name="historyStoragePath">History storage path - can be a full depot path (//depot/history) 
         /// or a relative path (stream-history) which will be resolved under the stream path</param>
         /// <returns>Full depot path to the snapshot file</returns>
-        private string GetSnapshotFilePath(string streamPath, string historyStoragePath)
+        public string GetSnapshotFilePath(string streamPath, string historyStoragePath)
         {
             // Convert stream path to a safe filename
             // Example: //depot/main/dev -> depot_main_dev.json

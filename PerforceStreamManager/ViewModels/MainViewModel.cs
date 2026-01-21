@@ -204,6 +204,11 @@ namespace PerforceStreamManager.ViewModels
         /// </summary>
         public ICommand OpenLogFileCommand { get; }
 
+        /// <summary>
+        /// Command to restore rules from history
+        /// </summary>
+        public ICommand RestoreCommand { get; }
+
         public MainViewModel(P4Service p4Service, SnapshotService snapshotService, SettingsService settingsService)
         {
             _p4Service = p4Service ?? throw new ArgumentNullException(nameof(p4Service));
@@ -222,6 +227,7 @@ namespace PerforceStreamManager.ViewModels
             SaveCommand = new RelayCommand(Save, CanSave);
             OpenSettingsCommand = new RelayCommand(OpenSettings);
             OpenLogFileCommand = new RelayCommand(OpenLogFile);
+            RestoreCommand = new RelayCommand(RestoreFromHistory, CanRestore);
 
             InitializeConnection();
         }
@@ -245,6 +251,7 @@ namespace PerforceStreamManager.ViewModels
             SaveCommand = new RelayCommand(Save, CanSave);
             OpenSettingsCommand = new RelayCommand(OpenSettings);
             OpenLogFileCommand = new RelayCommand(OpenLogFile);
+            RestoreCommand = new RelayCommand(RestoreFromHistory, CanRestore);
 
             InitializeConnection();
         }
@@ -576,7 +583,7 @@ namespace PerforceStreamManager.ViewModels
                 var removed = currentRules.RemoveAll(r => 
                     r.Type == ruleType && 
                     r.Path == rulePath && 
-                    r.RemapTarget == ruleRemapTarget) > 0;
+                    r.RemapTarget == ruleRemapTarget || (string.IsNullOrEmpty(r.RemapTarget) &&  string.IsNullOrEmpty(ruleRemapTarget))) > 0;
 
                 if (removed)
                 {
@@ -722,6 +729,113 @@ namespace PerforceStreamManager.ViewModels
                 System.Windows.MessageBox.Show($"Error opening log file: {ex.Message}", "Error", 
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// Restores rules from a previous snapshot version
+        /// </summary>
+        /// <param name="parameter">Optional parameter</param>
+        private void RestoreFromHistory(object? parameter)
+        {
+            if (SelectedStream == null)
+            {
+                System.Windows.MessageBox.Show("Please select a stream first.", "No Stream Selected", 
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            RunWithProgressAsync(async () =>
+            {
+                var streamNode = SelectedStream;
+                var settings = _settingsService.LoadSettings();
+                string storagePath = settings.HistoryStoragePath;
+
+                // Resolve relative storage path
+                if (!string.IsNullOrWhiteSpace(storagePath) && !storagePath.StartsWith("//") && !string.IsNullOrWhiteSpace(StreamPathInput))
+                {
+                    string root = StreamPathInput.TrimEnd('/');
+                    storagePath = $"{root}/{storagePath.TrimStart('/')}";
+                }
+
+                // Get snapshot file path
+                string snapshotFilePath = _snapshotService.GetSnapshotFilePath(StreamPathInput, storagePath);
+
+                // Get file history
+                var revisions = await Task.Run(() => _p4Service.GetFileHistory(snapshotFilePath));
+
+                if (revisions.Count == 0)
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        System.Windows.MessageBox.Show(
+                            $"No history found for this stream.\n\nSnapshot file: {snapshotFilePath}\n\nYou need to save at least once before you can restore from history.", 
+                            "No History", 
+                            System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                    });
+                    return;
+                }
+
+                // Show restore dialog on UI thread
+                Models.FileRevisionInfo? selectedRevision = null;
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var dialog = new Views.RestoreDialog(streamNode.Path, revisions);
+                    if (System.Windows.Application.Current?.MainWindow != null)
+                    {
+                        dialog.Owner = System.Windows.Application.Current.MainWindow;
+                    }
+                    
+                    if (dialog.ShowDialog() == true)
+                    {
+                        selectedRevision = dialog.SelectedRevision;
+                    }
+                });
+
+                if (selectedRevision == null)
+                {
+                    return; // User cancelled
+                }
+
+                // Load snapshot at selected revision
+                var revision = selectedRevision;
+                var jsonContent = await Task.Run(() => _p4Service.ReadDepotFileAtRevision(snapshotFilePath, revision.Revision));
+                var snapshot = _snapshotService.LoadSnapshot(jsonContent);
+
+                // Filter to only local rules (where SourceStream matches the selected stream)
+                var localRules = snapshot.Rules
+                    .Where(r => string.Equals(r.SourceStream, streamNode.Path, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                // Update UI on dispatcher thread
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    // Replace local rules with restored rules
+                    streamNode.LocalRules.Clear();
+                    foreach (var rule in localRules)
+                    {
+                        streamNode.LocalRules.Add(rule);
+                    }
+
+                    // Mark as unsaved
+                    HasUnsavedChanges = true;
+
+                    // Refresh display
+                    RefreshRuleDisplay();
+
+                    System.Windows.MessageBox.Show(
+                        $"Restored {localRules.Count} local rule(s) from revision #{revision.Revision}.\n\nClick Save to apply these changes to Perforce.", 
+                        "Restore Complete", 
+                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                });
+            }, "Loading history...");
+        }
+
+        /// <summary>
+        /// Determines if restore can be executed
+        /// </summary>
+        private bool CanRestore(object? parameter)
+        {
+            return _p4Service.IsConnected && SelectedStream != null;
         }
 
         /// <summary>

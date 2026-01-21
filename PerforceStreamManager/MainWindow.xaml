@@ -21,6 +21,8 @@
                 <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
                 <MenuItem Header="Open _Log File" Command="{Binding OpenLogFileCommand}"/>
                 <Separator/>
+                <MenuItem Header="_Restore from History..." Command="{Binding RestoreCommand}"/>
+                <Separator/>
                 <MenuItem Header="E_xit" Click="Exit_Click"/>
             </MenuItem>
 
@@ -40,6 +42,7 @@
             <Button Content="Delete Rule" Command="{Binding DeleteRuleCommand}"/>
             <Separator/>
             <Button Content="Save" Command="{Binding SaveCommand}"/>
+            <Button Content="Restore" Command="{Binding RestoreCommand}" ToolTip="Restore rules from a previous version"/>
         </ToolBar>
         
         <!-- Status Bar -->

@@ -1056,6 +1056,133 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
+        /// Gets the revision history for a depot file
+        /// </summary>
+        /// <param name="depotPath">Full depot path to the file</param>
+        /// <returns>List of FileRevisionInfo ordered by revision (newest first)</returns>
+        /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="Exception">Thrown when file history retrieval fails</exception>
+        public List<Models.FileRevisionInfo> GetFileHistory(string depotPath)
+        {
+            EnsureConnected();
+
+            if (string.IsNullOrWhiteSpace(depotPath))
+                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+
+            try
+            {
+                _loggingService.LogInfo($"Getting file history for: {depotPath}");
+
+                // Use 'p4 filelog' command to get file history
+                var cmd = new P4Command(_repository!, "filelog", true, "-l", depotPath);
+                var results = cmd.Run();
+                var revisions = new List<Models.FileRevisionInfo>();
+
+                if (results?.TaggedOutput != null)
+                {
+                    foreach (var record in results.TaggedOutput)
+                    {
+                        // Each record in filelog output contains revision info
+                        // Look for keys like rev0, change0, action0, time0, user0, desc0
+                        // for the first revision, rev1, change1, etc. for subsequent revisions
+                        
+                        int revIndex = 0;
+                        while (record.ContainsKey($"rev{revIndex}"))
+                        {
+                            var revInfo = new Models.FileRevisionInfo();
+
+                            if (record.TryGetValue($"rev{revIndex}", out var revStr) && int.TryParse(revStr, out var rev))
+                                revInfo.Revision = rev;
+
+                            if (record.TryGetValue($"change{revIndex}", out var changeStr) && int.TryParse(changeStr, out var change))
+                                revInfo.Changelist = change;
+
+                            if (record.TryGetValue($"time{revIndex}", out var timeStr) && long.TryParse(timeStr, out var unixTime))
+                                revInfo.Date = DateTimeOffset.FromUnixTimeSeconds(unixTime).LocalDateTime;
+
+                            if (record.TryGetValue($"user{revIndex}", out var user))
+                                revInfo.User = user ?? "";
+
+                            if (record.TryGetValue($"desc{revIndex}", out var desc))
+                                revInfo.Description = desc?.Trim() ?? "";
+
+                            if (record.TryGetValue($"action{revIndex}", out var action))
+                                revInfo.Action = action ?? "";
+
+                            revisions.Add(revInfo);
+                            revIndex++;
+                        }
+                    }
+                }
+
+                _loggingService.LogInfo($"Found {revisions.Count} revisions for {depotPath}");
+                return revisions;
+            }
+            catch (P4Exception ex)
+            {
+                _loggingService.LogError(ex, $"GetFileHistory({depotPath})");
+                throw new Exception($"Failed to get file history for '{depotPath}': {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Reads the content of a depot file at a specific revision
+        /// </summary>
+        /// <param name="depotPath">Full depot path to the file</param>
+        /// <param name="revision">Revision number to read</param>
+        /// <returns>File content as string</returns>
+        /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="Exception">Thrown when file read fails</exception>
+        public string ReadDepotFileAtRevision(string depotPath, int revision)
+        {
+            EnsureConnected();
+
+            if (string.IsNullOrWhiteSpace(depotPath))
+                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+
+            if (revision < 1)
+                throw new ArgumentException("Revision must be >= 1", nameof(revision));
+
+            try
+            {
+                _loggingService.LogInfo($"Reading depot file: {depotPath}#{revision}");
+
+                // Use 'p4 print -q' to output file content to a temp file
+                string tempFile = System.IO.Path.GetTempFileName();
+                try
+                {
+                    string fileSpec = $"{depotPath}#{revision}";
+                    var cmd = new P4Command(_repository!, "print", false, "-q", "-o", tempFile, fileSpec);
+                    var result = cmd.Run();
+
+                    if (result.ErrorList != null && result.ErrorList.Count > 0)
+                    {
+                        throw new P4Exception(result.ErrorList[0]);
+                    }
+
+                    if (System.IO.File.Exists(tempFile))
+                    {
+                        return System.IO.File.ReadAllText(tempFile);
+                    }
+
+                    return string.Empty;
+                }
+                finally
+                {
+                    if (System.IO.File.Exists(tempFile))
+                    {
+                        System.IO.File.Delete(tempFile);
+                    }
+                }
+            }
+            catch (P4Exception ex)
+            {
+                _loggingService.LogError(ex, $"ReadDepotFileAtRevision({depotPath}#{revision})");
+                throw new Exception($"Failed to read depot file '{depotPath}#{revision}': {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Disposes of the service and disconnects from Perforce
         /// </summary>
         public void Dispose()
