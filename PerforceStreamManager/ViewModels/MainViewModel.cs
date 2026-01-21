@@ -578,12 +578,14 @@ namespace PerforceStreamManager.ViewModels
 
                 // Get current local rules
                 var currentRules = SelectedStream.LocalRules;
+                
+                bool isRemap = string.Equals(ruleType, "remap", StringComparison.OrdinalIgnoreCase);
 
                 // Remove the rule
                 var removed = currentRules.RemoveAll(r => 
                     r.Type == ruleType && 
                     r.Path == rulePath && 
-                    r.RemapTarget == ruleRemapTarget || (string.IsNullOrEmpty(r.RemapTarget) &&  string.IsNullOrEmpty(ruleRemapTarget))) > 0;
+                    ((isRemap && r.RemapTarget == ruleRemapTarget) || !isRemap)) > 0;
 
                 if (removed)
                 {
