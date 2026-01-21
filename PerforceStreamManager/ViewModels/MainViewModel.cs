@@ -635,9 +635,6 @@ namespace PerforceStreamManager.ViewModels
                 createdBy = userOnly;
             }
 
-            // Capture StreamPathInput on UI thread
-            string streamPathInput = StreamPathInput;
-
             RunWithProgressAsync(async () =>
             {
                 var streamNode = SelectedStream;
@@ -652,9 +649,9 @@ namespace PerforceStreamManager.ViewModels
                     var snapshot = _snapshotService.CreateSnapshot(streamNode, createdBy, description);
 
                     // Force StreamPath to match StreamPathInput per requirement
-                    if (!string.IsNullOrWhiteSpace(streamPathInput))
+                    if (!string.IsNullOrWhiteSpace(StreamPathInput))
                     {
-                        snapshot.StreamPath = streamPathInput;
+                        snapshot.StreamPath = StreamPathInput;
                     }
 
                     // Get history storage path from settings
@@ -662,15 +659,15 @@ namespace PerforceStreamManager.ViewModels
                     string storagePath = settings.HistoryStoragePath;
 
                     // If storage path is relative, append it to StreamPathInput
-                    if (!string.IsNullOrWhiteSpace(storagePath) && !storagePath.StartsWith("//") && !string.IsNullOrWhiteSpace(streamPathInput))
+                    if (!string.IsNullOrWhiteSpace(storagePath) && !storagePath.StartsWith("//") && !string.IsNullOrWhiteSpace(StreamPathInput))
                     {
-                        string root = streamPathInput.TrimEnd('/');
+                        string root = StreamPathInput.TrimEnd('/');
                         storagePath = $"{root}/{storagePath.TrimStart('/')}";
                     }
 
                     // Try to auto-detect workspace for this stream if one isn't explicitly set
                     // This ensures we can resolve local paths for 'p4 where'
-                    _p4Service.AutoDetectAndSwitchWorkspace(streamPathInput);
+                    _p4Service.AutoDetectAndSwitchWorkspace(StreamPathInput);
 
                     // Save snapshot
                     _snapshotService.SaveSnapshot(snapshot, storagePath);
@@ -708,7 +705,7 @@ namespace PerforceStreamManager.ViewModels
                     return;
                 }
 
-                var historyViewModel = new HistoryViewModel(_snapshotService, _settingsService, SelectedStream.Path);
+                var historyViewModel = new HistoryViewModel(_snapshotService, _settingsService, StreamPathInput);
                 var historyWindow = new Views.HistoryWindow(historyViewModel);
                 historyWindow.ShowDialog();
             }

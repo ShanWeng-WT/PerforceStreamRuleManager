@@ -674,20 +674,34 @@ namespace PerforceStreamManager.Services
 
             try
             {
-                // Use P4Command with 'print -q' to read file directly, bypassing client view restrictions
-                // tagged=false to get raw text output
-                var cmd = new P4Command(_repository!, "print", false, "-q", depotPath);
-                var result = cmd.Run();
-
-                if (result.ErrorList != null && result.ErrorList.Count > 0)
+                // Use 'print -o' to output file content to a temp file
+                // This is the most reliable method with P4API.NET as the API doesn't
+                // populate TextOutput/BinaryOutput for the print command
+                string tempFile = System.IO.Path.GetTempFileName();
+                try
                 {
-                    // Throw the first error found
-                    throw new P4Exception(result.ErrorList[0]);
+                    var cmd = new P4Command(_repository!, "print", false, "-q", "-o", tempFile, depotPath);
+                    var result = cmd.Run();
+                    
+                    if (result.ErrorList != null && result.ErrorList.Count > 0)
+                    {
+                        throw new P4Exception(result.ErrorList[0]);
+                    }
+                    
+                    if (System.IO.File.Exists(tempFile))
+                    {
+                        return System.IO.File.ReadAllText(tempFile);
+                    }
+                    
+                    return string.Empty;
                 }
-
-                // For tagged=false, content should be in TextOutput
-                // Note: result.TextOutput might be null if file is empty
-                return result.TextOutput ?? string.Empty;
+                finally
+                {
+                    if (System.IO.File.Exists(tempFile))
+                    {
+                        System.IO.File.Delete(tempFile);
+                    }
+                }
             }
             catch (P4Exception ex)
             {

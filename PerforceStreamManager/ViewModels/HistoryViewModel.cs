@@ -20,25 +20,9 @@ namespace PerforceStreamManager.ViewModels
         
         private Snapshot? _selectedSnapshot;
         private Snapshot? _comparisonSnapshot;
-        private string? _streamPath;
+        private string? _targetStream;
 
         public event PropertyChangedEventHandler? PropertyChanged;
-
-        /// <summary>
-        /// Stream path for this history view
-        /// </summary>
-        public string? StreamPath
-        {
-            get => _streamPath;
-            set
-            {
-                if (_streamPath != value)
-                {
-                    _streamPath = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
 
         /// <summary>
         /// Collection of snapshots for the current stream
@@ -124,11 +108,11 @@ namespace PerforceStreamManager.ViewModels
         /// </summary>
         public ICommand RestoreSnapshotCommand { get; }
 
-        public HistoryViewModel(SnapshotService snapshotService, SettingsService settingsService, string streamPath)
+        public HistoryViewModel(SnapshotService snapshotService, SettingsService settingsService, string targetStream)
         {
             _snapshotService = snapshotService ?? throw new ArgumentNullException(nameof(snapshotService));
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
-            _streamPath = streamPath;
+            _targetStream = targetStream;
 
             Snapshots = new ObservableCollection<Snapshot>();
             DiffResults = new ObservableCollection<RuleDiffViewModel>();
@@ -147,7 +131,7 @@ namespace PerforceStreamManager.ViewModels
         /// <param name="parameter">Optional parameter</param>
         private void LoadHistory(object? parameter)
         {
-            if (string.IsNullOrWhiteSpace(_streamPath))
+            if (string.IsNullOrWhiteSpace(_targetStream))
             {
                 return;
             }
@@ -168,7 +152,7 @@ namespace PerforceStreamManager.ViewModels
 
                 // Load snapshots from service (background)
                 var settings = await Task.Run(() => _settingsService.LoadSettings());
-                var snapshots = await Task.Run(() => _snapshotService.LoadHistory(_streamPath, settings.HistoryStoragePath));
+                var snapshots = await Task.Run(() => _snapshotService.LoadHistory(_targetStream, settings.HistoryStoragePath));
 
                 // Add to observable collection (UI thread)
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -192,7 +176,7 @@ namespace PerforceStreamManager.ViewModels
         /// </summary>
         private bool CanLoadHistory(object? parameter)
         {
-            return !string.IsNullOrWhiteSpace(_streamPath);
+            return !string.IsNullOrWhiteSpace(_targetStream);
         }
 
         /// <summary>

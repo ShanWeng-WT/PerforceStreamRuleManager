@@ -147,8 +147,9 @@ namespace PerforceStreamManager.Services
         /// <summary>
         /// Generates the depot file path for a stream's history file
         /// </summary>
-        /// <param name="streamPath">Full depot path of the stream</param>
-        /// <param name="historyStoragePath">Base depot path for history storage</param>
+        /// <param name="streamPath">Full depot path of the stream (e.g., //depot/main)</param>
+        /// <param name="historyStoragePath">History storage path - can be a full depot path (//depot/history) 
+        /// or a relative path (stream-history) which will be resolved under the stream path</param>
         /// <returns>Full depot path to the history file</returns>
         private string GetHistoryFilePath(string streamPath, string historyStoragePath)
         {
@@ -157,8 +158,20 @@ namespace PerforceStreamManager.Services
             string safeName = streamPath.TrimStart('/').Replace('/', '_');
             string fileName = $"{safeName}.json";
 
-            // Ensure history storage path ends with /
-            string basePath = historyStoragePath.TrimEnd('/');
+            string basePath;
+            
+            // Check if historyStoragePath is already a full depot path
+            if (historyStoragePath.StartsWith("//"))
+            {
+                // Already a full depot path, use as-is
+                basePath = historyStoragePath.TrimEnd('/');
+            }
+            else
+            {
+                // Relative path - resolve it under the stream path itself
+                // Example: //OSX/Fish1_1_Patch24 + stream-history -> //OSX/Fish1_1_Patch24/stream-history
+                basePath = $"{streamPath.TrimEnd('/')}/{historyStoragePath.TrimStart('/').TrimEnd('/')}";
+            }
             
             return $"{basePath}/{fileName}";
         }
@@ -244,8 +257,13 @@ namespace PerforceStreamManager.Services
 
                 // Create dictionaries for efficient lookup
                 // Key: combination of Type and Path (unique identifier for a rule)
-                var rules1Dict = snapshot1.Rules.ToDictionary(r => GetRuleKey(r), r => r);
-                var rules2Dict = snapshot2.Rules.ToDictionary(r => GetRuleKey(r), r => r);
+                // Use GroupBy to handle duplicate keys (take the first occurrence)
+                var rules1Dict = snapshot1.Rules
+                    .GroupBy(r => GetRuleKey(r))
+                    .ToDictionary(g => g.Key, g => g.First());
+                var rules2Dict = snapshot2.Rules
+                    .GroupBy(r => GetRuleKey(r))
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 // Find added rules (in snapshot2 but not in snapshot1)
                 foreach (var rule2 in snapshot2.Rules)
