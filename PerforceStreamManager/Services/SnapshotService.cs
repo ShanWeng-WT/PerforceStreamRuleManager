@@ -27,7 +27,7 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
-        /// Creates a snapshot of the current stream rules
+        /// Creates a snapshot of the current stream rules (single stream - legacy method)
         /// </summary>
         /// <param name="streamNode">The stream node to snapshot</param>
         /// <returns>A new Snapshot object</returns>
@@ -51,6 +51,77 @@ namespace PerforceStreamManager.Services
             {
                 _loggingService.LogError(ex, $"CreateSnapshot({streamNode.Path})");
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Creates a snapshot of the entire stream hierarchy starting from the root node.
+        /// Captures local rules for all streams in the tree.
+        /// </summary>
+        /// <param name="rootNode">The root stream node of the hierarchy</param>
+        /// <returns>A new Snapshot object containing rules for all streams</returns>
+        /// <exception cref="ArgumentNullException">Thrown when rootNode is null</exception>
+        public Snapshot CreateHierarchySnapshot(StreamNode rootNode)
+        {
+            if (rootNode == null)
+                throw new ArgumentNullException(nameof(rootNode));
+
+            try
+            {
+                var streamRules = new Dictionary<string, List<StreamRule>>();
+                
+                // Recursively collect rules from all streams in the hierarchy
+                CollectStreamRules(rootNode, streamRules);
+
+                // Log details about what was collected
+                int totalRules = streamRules.Values.Sum(r => r.Count);
+                _loggingService.LogInfo($"CreateHierarchySnapshot: Collected {streamRules.Count} streams with {totalRules} total rules");
+                foreach (var kvp in streamRules)
+                {
+                    _loggingService.LogInfo($"  Stream '{kvp.Key}': {kvp.Value.Count} rules");
+                }
+
+                var snapshot = new Snapshot(streamRules);
+                
+                // Verify snapshot was created correctly
+                _loggingService.LogInfo($"CreateHierarchySnapshot: Snapshot.StreamRules is {(snapshot.StreamRules == null ? "null" : $"not null with {snapshot.StreamRules.Count} entries")}");
+                _loggingService.LogInfo($"CreateHierarchySnapshot: Snapshot.Rules is {(snapshot.Rules == null ? "null" : $"not null with {snapshot.Rules.Count} entries")}");
+
+                return snapshot;
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError(ex, $"CreateHierarchySnapshot({rootNode.Path})");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Recursively collects local rules from a stream node and all its children
+        /// </summary>
+        private void CollectStreamRules(StreamNode node, Dictionary<string, List<StreamRule>> streamRules)
+        {
+            // Add this stream's local rules
+            if (node.LocalRules != null && node.LocalRules.Count > 0)
+            {
+                var rulesWithSource = node.LocalRules.Select(rule => 
+                    new StreamRule(rule.Type, rule.Path, rule.RemapTarget, node.Path)
+                ).ToList();
+                streamRules[node.Path] = rulesWithSource;
+            }
+            else
+            {
+                // Include streams with no rules too, so we know they were captured
+                streamRules[node.Path] = new List<StreamRule>();
+            }
+
+            // Recurse into children
+            if (node.Children != null)
+            {
+                foreach (var child in node.Children)
+                {
+                    CollectStreamRules(child, streamRules);
+                }
             }
         }
 
@@ -126,7 +197,15 @@ namespace PerforceStreamManager.Services
                 if (snapshot == null)
                     throw new Exception("Deserialization returned null");
 
-                _loggingService.LogInfo($"Loaded snapshot with {snapshot.Rules.Count} rules");
+                // Log appropriate message based on snapshot format
+                if (snapshot.StreamRules != null && snapshot.StreamRules.Count > 0)
+                {
+                    _loggingService.LogInfo($"Loaded hierarchy snapshot with {snapshot.StreamRules.Count} streams, {snapshot.StreamRules.Values.Sum(r => r.Count)} total rules");
+                }
+                else
+                {
+                    _loggingService.LogInfo($"Loaded legacy snapshot with {snapshot.Rules?.Count ?? 0} rules");
+                }
                 return snapshot;
             }
             catch (JsonException ex)

@@ -640,14 +640,21 @@ namespace PerforceStreamManager.ViewModels
             {
                 var streamNode = SelectedStream;
                 var rules = streamNode.LocalRules;
+                
+                // Capture the root stream on the UI thread before entering background task
+                var rootStream = StreamHierarchy.FirstOrDefault();
+                if (rootStream == null)
+                {
+                    throw new InvalidOperationException("No stream hierarchy loaded");
+                }
 
                 await Task.Run(() =>
                 {
                     // Update stream rules
                     _p4Service.UpdateStreamRules(streamNode.Path, rules);
 
-                    // Create snapshot
-                    var snapshot = _snapshotService.CreateSnapshot(streamNode);
+                    // Create snapshot of the ENTIRE hierarchy (not just selected stream)
+                    var snapshot = _snapshotService.CreateHierarchySnapshot(rootStream);
 
                     // Get history storage path from settings
                     var settings = _settingsService.LoadSettings();
@@ -809,21 +816,21 @@ namespace PerforceStreamManager.ViewModels
                 var jsonContent = await Task.Run(() => _p4Service.ReadDepotFileAtRevision(snapshotFilePath, revision.Revision));
                 var snapshot = _snapshotService.LoadSnapshot(jsonContent);
 
-                // Filter to only local rules (where SourceStream matches the selected stream)
-                var localRules = snapshot.Rules
-                    .Where(r => string.Equals(r.SourceStream, streamNode.Path, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
+                // Get the root stream to restore all streams in the hierarchy
+                var rootStream = StreamHierarchy.FirstOrDefault();
+                if (rootStream == null)
+                {
+                    throw new InvalidOperationException("No stream hierarchy loaded");
+                }
+
+                // Restore rules for all streams in the hierarchy
+                int totalStreamsRestored = 0;
+                int totalRulesRestored = 0;
+                RestoreHierarchyRules(rootStream, snapshot, ref totalStreamsRestored, ref totalRulesRestored);
 
                 // Update UI on dispatcher thread
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // Replace local rules with restored rules
-                    streamNode.LocalRules.Clear();
-                    foreach (var rule in localRules)
-                    {
-                        streamNode.LocalRules.Add(rule);
-                    }
-
                     // Mark as unsaved
                     HasUnsavedChanges = true;
 
@@ -831,7 +838,7 @@ namespace PerforceStreamManager.ViewModels
                     RefreshRuleDisplay();
 
                     System.Windows.MessageBox.Show(
-                        $"Restored {localRules.Count} local rule(s) from revision #{revision.Revision}.\n\nClick Save to apply these changes to Perforce.", 
+                        $"Restored {totalRulesRestored} rule(s) across {totalStreamsRestored} stream(s) from revision #{revision.Revision}.\n\nClick Save to apply these changes to Perforce.", 
                         "Restore Complete", 
                         System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                 });
@@ -844,6 +851,39 @@ namespace PerforceStreamManager.ViewModels
         private bool CanRestore(object? parameter)
         {
             return _p4Service.IsConnected && SelectedStream != null;
+        }
+
+        /// <summary>
+        /// Recursively restores rules for a stream node and all its children from a snapshot
+        /// </summary>
+        private void RestoreHierarchyRules(StreamNode node, Models.Snapshot snapshot, ref int totalStreamsRestored, ref int totalRulesRestored)
+        {
+            // Get rules for this stream from snapshot
+            var rules = snapshot.GetRulesForStream(node.Path);
+            
+            // Only update if there are rules in the snapshot for this stream
+            // (empty list means the stream was captured but had no rules)
+            if (snapshot.StreamRules?.ContainsKey(node.Path) == true || 
+                snapshot.StreamRules?.Keys.Any(k => string.Equals(k, node.Path, StringComparison.OrdinalIgnoreCase)) == true ||
+                rules.Count > 0)
+            {
+                node.LocalRules.Clear();
+                foreach (var rule in rules)
+                {
+                    node.LocalRules.Add(rule);
+                }
+                totalStreamsRestored++;
+                totalRulesRestored += rules.Count;
+            }
+
+            // Recurse into children
+            if (node.Children != null)
+            {
+                foreach (var child in node.Children)
+                {
+                    RestoreHierarchyRules(child, snapshot, ref totalStreamsRestored, ref totalRulesRestored);
+                }
+            }
         }
 
         /// <summary>
