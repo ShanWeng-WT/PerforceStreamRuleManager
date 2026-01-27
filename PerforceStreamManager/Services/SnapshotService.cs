@@ -43,7 +43,7 @@ namespace PerforceStreamManager.Services
                 var allRules = streamNode.GetAllRules();
 
                 // Create snapshot with captured rules
-                var snapshot = new Snapshot(streamNode.Path, allRules);
+                var snapshot = new Snapshot(allRules);
 
                 return snapshot;
             }
@@ -59,27 +59,29 @@ namespace PerforceStreamManager.Services
         /// P4's versioning will track the history automatically.
         /// </summary>
         /// <param name="snapshot">The snapshot to save</param>
+        /// <param name="streamPath">The stream path used to determine the snapshot file location</param>
         /// <param name="historyStoragePath">Base depot path for history storage</param>
         /// <param name="description">Commit description for P4</param>
+        /// <param name="submitImmediately">If true, submit the file immediately; otherwise leave it pending</param>
         /// <exception cref="ArgumentNullException">Thrown when snapshot is null</exception>
         /// <exception cref="Exception">Thrown when save operation fails</exception>
-        public void SaveSnapshot(Snapshot snapshot, string historyStoragePath, string description)
+        public void SaveSnapshot(Snapshot snapshot, string streamPath, string historyStoragePath, string description, bool submitImmediately = true)
         {
             if (snapshot == null)
                 throw new ArgumentNullException(nameof(snapshot));
 
+            if (string.IsNullOrWhiteSpace(streamPath))
+                throw new ArgumentException("Stream path cannot be null or empty", nameof(streamPath));
+
             if (string.IsNullOrWhiteSpace(historyStoragePath))
                 throw new ArgumentException("History storage path cannot be null or empty", nameof(historyStoragePath));
 
-            if (string.IsNullOrWhiteSpace(snapshot.StreamPath))
-                throw new ArgumentException("Snapshot stream path cannot be null or empty");
-
             try
             {
-                _loggingService.LogInfo($"Saving snapshot for stream: {snapshot.StreamPath}");
+                _loggingService.LogInfo($"Saving snapshot for stream: {streamPath}");
 
                 // Generate history file path for this stream
-                string snapshotFilePath = GetSnapshotFilePath(snapshot.StreamPath, historyStoragePath);
+                string snapshotFilePath = GetSnapshotFilePath(streamPath, historyStoragePath);
 
                 // Serialize to JSON
                 var options = new JsonSerializerOptions
@@ -90,12 +92,12 @@ namespace PerforceStreamManager.Services
                 string jsonContent = JsonSerializer.Serialize(snapshot, options);
 
                 // Write to depot - P4 versioning will track history
-                _p4Service.WriteDepotFile(snapshotFilePath, jsonContent, description);
+                _p4Service.WriteDepotFile(snapshotFilePath, jsonContent, description, submitImmediately);
             }
             catch (Exception ex)
             {
-                _loggingService.LogError(ex, $"SaveSnapshot({snapshot.StreamPath})");
-                throw new Exception($"Failed to save snapshot for stream '{snapshot.StreamPath}': {ex.Message}", ex);
+                _loggingService.LogError(ex, $"SaveSnapshot({streamPath})");
+                throw new Exception($"Failed to save snapshot for stream '{streamPath}': {ex.Message}", ex);
             }
         }
 
@@ -124,7 +126,7 @@ namespace PerforceStreamManager.Services
                 if (snapshot == null)
                     throw new Exception("Deserialization returned null");
 
-                _loggingService.LogInfo($"Loaded snapshot for stream: {snapshot.StreamPath} with {snapshot.Rules.Count} rules");
+                _loggingService.LogInfo($"Loaded snapshot with {snapshot.Rules.Count} rules");
                 return snapshot;
             }
             catch (JsonException ex)

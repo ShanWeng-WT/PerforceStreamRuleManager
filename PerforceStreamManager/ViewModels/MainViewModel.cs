@@ -619,6 +619,15 @@ namespace PerforceStreamManager.ViewModels
                 return;
             }
 
+            // Show save options dialog
+            var saveOptionsDialog = new Views.SaveOptionsDialog();
+            if (saveOptionsDialog.ShowDialog() != true)
+            {
+                return; // User cancelled
+            }
+            
+            bool submitImmediately = saveOptionsDialog.SubmitImmediately;
+
             // Parameter can be a description string
             string description = $"[{Environment.UserName}] Update Stream Rule: {StreamPathInput}";
 
@@ -640,12 +649,6 @@ namespace PerforceStreamManager.ViewModels
                     // Create snapshot
                     var snapshot = _snapshotService.CreateSnapshot(streamNode);
 
-                    // Force StreamPath to match StreamPathInput per requirement
-                    if (!string.IsNullOrWhiteSpace(StreamPathInput))
-                    {
-                        snapshot.StreamPath = StreamPathInput;
-                    }
-
                     // Get history storage path from settings
                     var settings = _settingsService.LoadSettings();
                     string storagePath = settings.HistoryStoragePath;
@@ -661,13 +664,16 @@ namespace PerforceStreamManager.ViewModels
                     _p4Service.AutoDetectAndSwitchWorkspace(StreamPathInput);
 
                     // Save snapshot - P4 versioning will track history
-                    _snapshotService.SaveSnapshot(snapshot, storagePath, description);
+                    _snapshotService.SaveSnapshot(snapshot, StreamPathInput, storagePath, description, submitImmediately);
                 });
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     HasUnsavedChanges = false;
-                    System.Windows.MessageBox.Show($"Stream {streamNode.Path} saved successfully.", "Success",
+                    string message = submitImmediately 
+                        ? $"Stream {streamNode.Path} saved and submitted successfully."
+                        : $"Stream {streamNode.Path} saved. Snapshot file left in pending changelist.";
+                    System.Windows.MessageBox.Show(message, "Success",
                         System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                 });
             }, "Saving stream...");

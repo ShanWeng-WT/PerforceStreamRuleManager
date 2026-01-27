@@ -718,7 +718,7 @@ namespace PerforceStreamManager.Services
         /// <param name="description">Changelist description</param>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
         /// <exception cref="Exception">Thrown when file write fails</exception>
-        public void WriteDepotFile(string depotPath, string content, string description)
+        public void WriteDepotFile(string depotPath, string content, string description, bool submitImmediately = true)
         {
             EnsureConnected();
 
@@ -885,32 +885,67 @@ namespace PerforceStreamManager.Services
 
                 if (!isOpenForEdit)
                 {
+                    // For AddFiles to work, the local file must exist first
+                    // Create the file with content before attempting to add
+                    var addFileDir = System.IO.Path.GetDirectoryName(localPath);
+                    if (!string.IsNullOrEmpty(addFileDir) && !System.IO.Directory.Exists(addFileDir))
+                    {
+                        System.IO.Directory.CreateDirectory(addFileDir);
+                    }
+                    
+                    _loggingService.LogInfo($"Creating local file before add: {localPath}");
+                    System.IO.File.WriteAllText(localPath, content);
+                    
                     // Try Add
                     _loggingService.LogInfo("Opening file for add...");
                     var addOptions = new AddFilesCmdOptions(AddFilesCmdFlags.None, changelist.Id, null);
                     var addedFiles = _connection!.Client.AddFiles(new List<FileSpec> { fileSpec }, addOptions);
                     if (addedFiles == null || addedFiles.Count == 0)
                     {
-                        throw new Exception($"Failed to open file for add: No files were opened. Check workspace mapping for {depotPath}");
+                        // Provide detailed diagnostic information
+                        string diagClientRoot = "unknown";
+                        string diagClientStream = "unknown";
+                        try
+                        {
+                            var clientSpec = _repository!.GetClient(clientName);
+                            if (clientSpec != null)
+                            {
+                                diagClientRoot = clientSpec.Root ?? "not set";
+                                diagClientStream = clientSpec.Stream ?? "not a stream client";
+                            }
+                        }
+                        catch { }
+                        
+                        _loggingService.LogError(null, $"Failed to add file. Workspace: {clientName}, Root: {diagClientRoot}, Stream: {diagClientStream}, DepotPath: {depotPath}, LocalPath: {localPath}");
+                        throw new Exception($"Failed to open file for add: No files were opened.\n\n" +
+                            $"Depot path: {depotPath}\n" +
+                            $"Local path: {localPath}\n" +
+                            $"Workspace: {clientName}\n" +
+                            $"Workspace root: {diagClientRoot}\n" +
+                            $"Workspace stream: {diagClientStream}\n\n" +
+                            $"The file path may not be mapped in this workspace. " +
+                            $"Ensure your workspace is configured for the stream and the path is within the workspace mapping.");
                     }
                     _loggingService.LogInfo($"Successfully opened file for add: {addedFiles[0].DepotPath}");
                 }
-
-                // 5. Write Content to Local File
-                // Make sure file is writable if it exists (p4 edit should have done this, but to be safe)
-                if (System.IO.File.Exists(localPath))
+                else
                 {
-                    var fileInfo = new System.IO.FileInfo(localPath);
-                    if (fileInfo.IsReadOnly)
+                    // File was opened for edit, write the content now
+                    // Make sure file is writable if it exists (p4 edit should have done this, but to be safe)
+                    if (System.IO.File.Exists(localPath))
                     {
-                        fileInfo.IsReadOnly = false;
+                        var fileInfo = new System.IO.FileInfo(localPath);
+                        if (fileInfo.IsReadOnly)
+                        {
+                            fileInfo.IsReadOnly = false;
+                        }
                     }
+
+                    _loggingService.LogInfo($"Writing content to local file: {localPath}");
+                    System.IO.File.WriteAllText(localPath, content);
                 }
 
-                _loggingService.LogInfo($"Writing content to local file: {localPath}");
-                System.IO.File.WriteAllText(localPath, content);
-
-                // 6. Verify file is in changelist before submitting
+                // 6. Verify file is in changelist
                 _loggingService.LogInfo($"Verifying file is opened in changelist {changelist.Id}...");
                 var openedCmd = new P4Command(_repository!, "opened", true, "-c", changelist.Id.ToString(), depotPath);
                 var openedResult = openedCmd.Run();
@@ -925,25 +960,32 @@ namespace PerforceStreamManager.Services
                 
                 if (!fileIsOpened)
                 {
-                    throw new Exception($"File {depotPath} is not opened in changelist {changelist.Id}. Cannot submit. Check that the file is mapped in your workspace.");
+                    throw new Exception($"File {depotPath} is not opened in changelist {changelist.Id}. Cannot proceed. Check that the file is mapped in your workspace.");
                 }
                 
-                _loggingService.LogInfo($"File verified in changelist {changelist.Id}. Submitting...");
-                
-                // Submit
-                var submitOptions = new SubmitCmdOptions(SubmitFilesCmdFlags.None, changelist.Id, null, null, null);
-                var submitResults = _connection!.Client.SubmitFiles(submitOptions, null);
-                
-                if (submitResults != null && submitResults.Files != null)
+                if (submitImmediately)
                 {
-                    _loggingService.LogInfo($"Successfully submitted {submitResults.Files.Count} file(s)");
+                    _loggingService.LogInfo($"File verified in changelist {changelist.Id}. Submitting...");
+                    
+                    // Submit
+                    var submitOptions = new SubmitCmdOptions(SubmitFilesCmdFlags.None, changelist.Id, null, null, null);
+                    var submitResults = _connection!.Client.SubmitFiles(submitOptions, null);
+                    
+                    if (submitResults != null && submitResults.Files != null)
+                    {
+                        _loggingService.LogInfo($"Successfully submitted {submitResults.Files.Count} file(s)");
+                    }
+                    else
+                    {
+                        throw new Exception("Submit returned no results");
+                    }
+                    
+                    _loggingService.LogInfo($"Successfully submitted {depotPath}");
                 }
                 else
                 {
-                    throw new Exception("Submit returned no results");
+                    _loggingService.LogInfo($"File left pending in changelist {changelist.Id} (submit skipped by user request)");
                 }
-                
-                _loggingService.LogInfo($"Successfully submitted {depotPath}");
             }
             catch (P4Exception ex)
             {

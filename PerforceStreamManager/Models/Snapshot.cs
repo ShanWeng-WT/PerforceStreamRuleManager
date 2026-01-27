@@ -9,24 +9,17 @@ namespace PerforceStreamManager.Models
     public class Snapshot
     {
         /// <summary>
-        /// Full depot path of the stream
-        /// </summary>
-        public string StreamPath { get; set; }
-
-        /// <summary>
         /// All rules captured in this snapshot
         /// </summary>
         public List<StreamRule> Rules { get; set; }
 
         public Snapshot()
         {
-            StreamPath = "";
             Rules = new List<StreamRule>();
         }
 
-        public Snapshot(string streamPath, List<StreamRule> rules)
+        public Snapshot(List<StreamRule> rules)
         {
-            StreamPath = streamPath;
             Rules = rules ?? new List<StreamRule>();
         }
     }
