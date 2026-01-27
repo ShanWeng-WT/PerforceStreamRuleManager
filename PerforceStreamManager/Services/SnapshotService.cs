@@ -140,35 +140,63 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
-        /// Generates the depot file path for a stream's snapshot file
+        /// Generates the depot file path for a stream's snapshot file.
+        /// The filename is derived from the historyStoragePath setting.
         /// </summary>
         /// <param name="streamPath">Full depot path of the stream (e.g., //depot/main)</param>
-        /// <param name="historyStoragePath">History storage path - can be a full depot path (//depot/history) 
-        /// or a relative path (stream-history) which will be resolved under the stream path</param>
+        /// <param name="historyStoragePath">History storage path - can be a full depot path (//depot/history/snapshots) 
+        /// or a relative path (stream-history). The last segment becomes the filename.
+        /// Examples:
+        ///   - "stream-history" -> {streamPath}/stream-history.json
+        ///   - "stream-history/history" -> {streamPath}/stream-history/history.json
+        ///   - "//depot/history" -> //depot/history.json
+        ///   - "//depot/history/snapshots" -> //depot/history/snapshots.json
+        /// </param>
         /// <returns>Full depot path to the snapshot file</returns>
         public string GetSnapshotFilePath(string streamPath, string historyStoragePath)
         {
-            // Convert stream path to a safe filename
-            // Example: //depot/main/dev -> depot_main_dev.json
-            string safeName = streamPath.TrimStart('/').Replace('/', '_');
-            string fileName = $"{safeName}.json";
-
-            string basePath;
+            // Normalize the path
+            string normalizedPath = historyStoragePath.Trim().TrimEnd('/');
             
-            // Check if historyStoragePath is already a full depot path
-            if (historyStoragePath.StartsWith("//"))
+            // Split path into directory and filename
+            int lastSlashIndex = normalizedPath.LastIndexOf('/');
+            string directory;
+            string fileName;
+            
+            if (lastSlashIndex >= 0)
             {
-                // Already a full depot path, use as-is
-                basePath = historyStoragePath.TrimEnd('/');
+                directory = normalizedPath.Substring(0, lastSlashIndex);
+                fileName = normalizedPath.Substring(lastSlashIndex + 1) + ".json";
             }
             else
             {
-                // Relative path - resolve it under the stream path itself
-                // Example: //OSX/Fish1_1_Patch24 + stream-history -> //OSX/Fish1_1_Patch24/stream-history
-                basePath = $"{streamPath.TrimEnd('/')}/{historyStoragePath.TrimStart('/').TrimEnd('/')}";
+                // No slash - just a filename (e.g., "stream-history")
+                directory = "";
+                fileName = normalizedPath + ".json";
             }
             
-            return $"{basePath}/{fileName}";
+            // Check if historyStoragePath is already a full depot path
+            if (normalizedPath.StartsWith("//"))
+            {
+                // Full depot path - use the directory portion as-is
+                if (string.IsNullOrEmpty(directory) || directory == "/")
+                {
+                    // Edge case: just "//depot" - use as directory
+                    return $"{normalizedPath}/{fileName}";
+                }
+                return $"{directory}/{fileName}";
+            }
+            else
+            {
+                // Relative path - resolve it under the stream path
+                string basePath = streamPath.TrimEnd('/');
+                if (string.IsNullOrEmpty(directory))
+                {
+                    // Just a filename, place at stream root
+                    return $"{basePath}/{fileName}";
+                }
+                return $"{basePath}/{directory}/{fileName}";
+            }
         }
     }
 }
