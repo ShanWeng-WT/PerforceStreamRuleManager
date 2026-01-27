@@ -834,53 +834,105 @@ namespace PerforceStreamManager.Services
                 var fileSpec = new FileSpec(new DepotPath(depotPath), null, null, null);
                 bool isOpenForEdit = false;
 
-                // Check if file exists in Perforce (to decide between Add and Edit)
-                bool exists = false;
+                // Check if file is already opened (in any changelist)
+                bool alreadyOpened = false;
+                int existingChangelistId = 0;
                 try
                 {
-                    var mdOptions = new GetFileMetaDataCmdOptions(
-                        GetFileMetadataCmdFlags.None,
-                        null, null, -1, null, null, null
-                    );
-                    var md = _repository!.GetFileMetaData(new List<FileSpec> { fileSpec }, mdOptions);
-                    if (md != null && md.Count > 0 && md[0] != null && 
-                        md[0].HeadAction != FileAction.Delete && 
-                        md[0].HeadAction != FileAction.MoveDelete)
+                    var checkOpenedCmd = new P4Command(_repository!, "opened", true, depotPath);
+                    var checkOpenedResult = checkOpenedCmd.Run();
+                    if (checkOpenedResult != null && checkOpenedResult.TaggedOutput != null && checkOpenedResult.TaggedOutput.Count > 0)
                     {
-                        exists = true;
-                        _loggingService.LogInfo($"File exists in depot at revision {md[0].HeadRev}");
+                        alreadyOpened = true;
+                        if (checkOpenedResult.TaggedOutput[0].ContainsKey("change"))
+                        {
+                            int.TryParse(checkOpenedResult.TaggedOutput[0]["change"], out existingChangelistId);
+                        }
+                        string action = checkOpenedResult.TaggedOutput[0].ContainsKey("action") ? checkOpenedResult.TaggedOutput[0]["action"] : "unknown";
+                        _loggingService.LogInfo($"File is already opened for {action} in changelist {existingChangelistId}");
                     }
                 }
                 catch (Exception ex)
-                { 
-                    _loggingService.LogInfo($"File not found in depot (will add): {ex.Message}");
+                {
+                    _loggingService.LogInfo($"Opened check: {ex.Message}");
                 }
 
-                try 
+                // If file is already opened, reopen it into our changelist
+                if (alreadyOpened)
                 {
-                    if (exists)
+                    _loggingService.LogInfo($"Reopening file from changelist {existingChangelistId} to {changelist.Id}...");
+                    try
                     {
-                        // Sync the file first to ensure we are editing the latest revision
-                        // This prevents "must resolve" errors if we are out of date
-                        _loggingService.LogInfo("Syncing file before edit...");
-                        _connection!.Client.SyncFiles(new List<FileSpec> { fileSpec }, null);
-
-                        var editOptions = new EditCmdOptions(EditFilesCmdFlags.None, changelist.Id, null);
-                        var editedFiles = _connection.Client.EditFiles(new List<FileSpec> { fileSpec }, editOptions);
-                        if (editedFiles != null && editedFiles.Count > 0)
+                        var reopenCmd = new P4Command(_repository!, "reopen", true, "-c", changelist.Id.ToString(), depotPath);
+                        var reopenResult = reopenCmd.Run();
+                        if (reopenResult != null && reopenResult.TaggedOutput != null && reopenResult.TaggedOutput.Count > 0)
                         {
-                            _loggingService.LogInfo($"Successfully opened file for edit: {editedFiles[0].DepotPath}");
+                            _loggingService.LogInfo($"Successfully reopened file in changelist {changelist.Id}");
                             isOpenForEdit = true;
                         }
                         else
                         {
-                            _loggingService.LogInfo("EditFiles returned no results.");
+                            _loggingService.LogInfo("Reopen returned no tagged output, but may have succeeded.");
+                            isOpenForEdit = true; // Assume success if no error was thrown
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        _loggingService.LogError(ex, "Reopen failed");
+                        throw new Exception($"File is already opened in changelist {existingChangelistId} and could not be reopened: {ex.Message}");
+                    }
                 }
-                catch (Exception ex)
+
+                // Check if file exists in Perforce (to decide between Add and Edit)
+                bool exists = false;
+                if (!isOpenForEdit)
                 {
-                    _loggingService.LogInfo($"EditFiles failed: {ex.Message}. Trying AddFiles.");
+                    try
+                    {
+                        var mdOptions = new GetFileMetaDataCmdOptions(
+                            GetFileMetadataCmdFlags.None,
+                            null, null, -1, null, null, null
+                        );
+                        var md = _repository!.GetFileMetaData(new List<FileSpec> { fileSpec }, mdOptions);
+                        if (md != null && md.Count > 0 && md[0] != null && 
+                            md[0].HeadAction != FileAction.Delete && 
+                            md[0].HeadAction != FileAction.MoveDelete)
+                        {
+                            exists = true;
+                            _loggingService.LogInfo($"File exists in depot at revision {md[0].HeadRev}");
+                        }
+                    }
+                    catch (Exception ex)
+                    { 
+                        _loggingService.LogInfo($"File not found in depot (will add): {ex.Message}");
+                    }
+
+                    try 
+                    {
+                        if (exists)
+                        {
+                            // Sync the file first to ensure we are editing the latest revision
+                            // This prevents "must resolve" errors if we are out of date
+                            _loggingService.LogInfo("Syncing file before edit...");
+                            _connection!.Client.SyncFiles(new List<FileSpec> { fileSpec }, null);
+
+                            var editOptions = new EditCmdOptions(EditFilesCmdFlags.None, changelist.Id, null);
+                            var editedFiles = _connection.Client.EditFiles(new List<FileSpec> { fileSpec }, editOptions);
+                            if (editedFiles != null && editedFiles.Count > 0)
+                            {
+                                _loggingService.LogInfo($"Successfully opened file for edit: {editedFiles[0].DepotPath}");
+                                isOpenForEdit = true;
+                            }
+                            else
+                            {
+                                _loggingService.LogInfo("EditFiles returned no results.");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _loggingService.LogInfo($"EditFiles failed: {ex.Message}. Trying AddFiles.");
+                    }
                 }
 
                 if (!isOpenForEdit)
