@@ -71,12 +71,13 @@ This document specifies the requirements for a WPF C# desktop application that m
 
 #### Acceptance Criteria
 
-1. WHEN a user initiates a snapshot operation, THE Stream_Rule_Manager SHALL capture the current state of all rules for the selected stream
-2. WHEN creating a snapshot, THE Stream_Rule_Manager SHALL serialize the rule state as JSON
+1. WHEN a user initiates a snapshot operation, THE Stream_Rule_Manager SHALL capture the current state of all rules for the entire stream hierarchy
+2. WHEN creating a snapshot, THE Stream_Rule_Manager SHALL serialize the rule state as JSON with hierarchical structure (mapping stream paths to their rules)
 3. WHEN saving a snapshot, THE Stream_Rule_Manager SHALL store the JSON file in the configured depot history path
-4. WHEN saving a snapshot, THE Stream_Rule_Manager SHALL commit the JSON file to the depot using P4API.NET
-5. THE Stream_Rule_Manager SHALL create one history file per stream in the depot
-6. WHEN appending to an existing history file, THE Stream_Rule_Manager SHALL add the new snapshot to the stream's JSON history file
+4. WHEN saving a snapshot, THE Stream_Rule_Manager SHALL present a dialog allowing the user to choose between immediately submitting the snapshot or leaving it pending in the workspace
+5. WHEN saving a snapshot, THE Stream_Rule_Manager SHALL commit the JSON file to the depot using P4API.NET
+6. THE Stream_Rule_Manager SHALL create one history file per stream in the depot
+7. WHEN appending to an existing history file, THE Stream_Rule_Manager SHALL maintain P4 versioning to track snapshot history
 
 ### Requirement 6: Snapshot History Storage
 
@@ -85,10 +86,12 @@ This document specifies the requirements for a WPF C# desktop application that m
 #### Acceptance Criteria
 
 1. THE Stream_Rule_Manager SHALL store snapshots as JSON files in the depot
-2. WHEN storing snapshots, THE Stream_Rule_Manager SHALL use one JSON file per stream
-3. WHEN encoding snapshots, THE Stream_Rule_Manager SHALL include timestamp, stream name, and rule details in the JSON structure
-4. THE Stream_Rule_Manager SHALL commit history files to the depot using P4API.NET
-5. WHEN retrieving history, THE Stream_Rule_Manager SHALL parse JSON files from the depot using P4API.NET
+2. WHEN storing snapshots, THE Stream_Rule_Manager SHALL use one JSON file per stream with hierarchical format mapping stream paths to their rules
+3. WHEN encoding snapshots, THE Stream_Rule_Manager SHALL include timestamp, hierarchical stream-to-rules mapping, and rule details in the JSON structure
+4. WHEN storing snapshots, THE Stream_Rule_Manager SHALL leverage P4 file versioning to maintain complete history (rather than appending to a single JSON file)
+5. THE Stream_Rule_Manager SHALL commit history files to the depot using P4API.NET
+6. WHEN retrieving history, THE Stream_Rule_Manager SHALL parse JSON files from the depot using P4API.NET
+7. WHEN loading legacy snapshots, THE Stream_Rule_Manager SHALL support the previous flat rule list format for backward compatibility
 
 ### Requirement 7: History Viewer with Timeline
 
@@ -101,27 +104,29 @@ This document specifies the requirements for a WPF C# desktop application that m
 3. WHEN a user selects a snapshot in the timeline, THE Stream_Rule_Manager SHALL display the rule state from that snapshot
 4. THE Stream_Rule_Manager SHALL load snapshot history from the stream's JSON history file in the depot
 
-### Requirement 8: Snapshot Comparison
+### Requirement 8: Change Tracking
 
-**User Story:** As a developer, I want to compare two snapshots, so that I can see what changed between them.
+**User Story:** As a developer, I want to track changes to rules before saving, so that I can review what will be submitted to Perforce.
 
 #### Acceptance Criteria
 
-1. WHEN a user selects two snapshots for comparison, THE Stream_Rule_Manager SHALL display a diff view
-2. WHEN displaying the diff, THE Stream_Rule_Manager SHALL highlight rules that were added between snapshots
-3. WHEN displaying the diff, THE Stream_Rule_Manager SHALL highlight rules that were removed between snapshots
-4. WHEN displaying the diff, THE Stream_Rule_Manager SHALL highlight rules that were modified between snapshots
+1. WHEN a user makes changes to rules in the stream hierarchy, THE Stream_Rule_Manager SHALL track which rules were added or deleted
+2. WHEN displaying pending changes, THE Stream_Rule_Manager SHALL highlight rules that were added since the last load
+3. WHEN displaying pending changes, THE Stream_Rule_Manager SHALL highlight rules that were deleted since the last load
+4. WHEN closing the application with unsaved changes, THE Stream_Rule_Manager SHALL display the pending changes dialog showing which streams and rules would be affected
+5. WHEN restoring from a snapshot, THE Stream_Rule_Manager SHALL restore all rules for the entire stream hierarchy and show the changes that will be applied
 
 ### Requirement 9: Snapshot Restore
 
-**User Story:** As a developer, I want to restore a stream to a previous snapshot state, so that I can revert unwanted changes.
+**User Story:** As a developer, I want to restore a stream hierarchy to a previous snapshot state, so that I can revert unwanted changes.
 
 #### Acceptance Criteria
 
-1. WHEN a user initiates a restore operation for a snapshot, THE Stream_Rule_Manager SHALL load the rule state from that snapshot
-2. WHEN restoring a snapshot, THE Stream_Rule_Manager SHALL apply the snapshot's rules to the current stream using P4API.NET
-3. WHEN restoring a snapshot, THE Stream_Rule_Manager SHALL replace the current stream rules with the snapshot rules
-4. WHEN a restore operation completes, THE Stream_Rule_Manager SHALL update the stream specification in Perforce using P4API.NET
+1. WHEN a user initiates a restore operation for a snapshot, THE Stream_Rule_Manager SHALL display a dialog showing available revisions with timestamps, dates, users, and descriptions
+2. WHEN a user selects a revision to restore, THE Stream_Rule_Manager SHALL load the rule state from that snapshot
+3. WHEN restoring a snapshot, THE Stream_Rule_Manager SHALL apply the snapshot's rules to all streams in the current hierarchy using P4API.NET
+4. WHEN restoring a snapshot, THE Stream_Rule_Manager SHALL replace the current stream rules with the snapshot rules
+5. WHEN a restore operation completes, THE Stream_Rule_Manager SHALL update all stream specifications in Perforce using P4API.NET
 
 ### Requirement 10: Application Settings
 
@@ -158,4 +163,39 @@ This document specifies the requirements for a WPF C# desktop application that m
 2. WHEN the user interacts with UI elements, THE Stream_Rule_Manager SHALL provide immediate visual feedback
 3. THE Stream_Rule_Manager SHALL use WPF controls for tree views, dialogs, and data display
 4. WHEN performing long-running operations, THE Stream_Rule_Manager SHALL display progress indicators
-5. THE Stream_Rule_Manager SHALL follow WPF MVVM or code-behind patterns for UI implementation
+5. THE Stream_Rule_Manager SHALL follow WPF MVVM pattern for UI implementation
+
+---
+
+## Additional Requirements (Beyond Base Scope)
+
+### Requirement 13: Workspace Auto-Detection
+
+**User Story:** As a developer, I want the application to automatically detect the appropriate Perforce workspace for a stream, so that I don't need to manually manage workspace context.
+
+#### Acceptance Criteria
+
+1. WHEN a user saves changes to streams, THE Stream_Rule_Manager SHALL automatically detect an appropriate workspace for the stream using P4API.NET
+2. WHEN multiple workspaces are available, THE Stream_Rule_Manager SHALL select the most appropriate workspace for the operation
+3. WHEN no suitable workspace exists, THE Stream_Rule_Manager SHALL fail gracefully with an error message
+
+### Requirement 14: Application Context Persistence
+
+**User Story:** As a developer, I want the application to remember my last used stream and settings, so that I don't need to reconfigure on each session.
+
+#### Acceptance Criteria
+
+1. WHEN the application closes, THE Stream_Rule_Manager SHALL save the currently loaded stream path to settings
+2. WHEN the application starts, THE Stream_Rule_Manager SHALL load the last used stream path from settings
+3. WHEN the last used stream is available, THE Stream_Rule_Manager SHALL automatically load it (subject to user configuration)
+
+### Requirement 15: Snapshot Submission Control
+
+**User Story:** As a developer, I want to control whether a snapshot is immediately submitted or left pending in my workspace, so that I can batch multiple changes together.
+
+#### Acceptance Criteria
+
+1. WHEN a user saves a snapshot, THE Stream_Rule_Manager SHALL display a dialog with submission options
+2. THE Stream_Rule_Manager SHALL provide a checkbox option to immediately submit the snapshot to the depot
+3. WHEN the immediate submission option is unchecked, THE Stream_Rule_Manager SHALL leave the snapshot file in the user's pending changelist
+4. THE Stream_Rule_Manager SHALL default to immediate submission for safety and consistency

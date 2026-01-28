@@ -53,8 +53,11 @@ The primary application window containing:
 #### Dialogs
 - **RuleDialog**: Add/edit rule with file browser integration
 - **SettingsDialog**: Configure P4 connection and history settings
-- **HistoryWindow**: Timeline view with snapshot comparison and restore
 - **DepotBrowserDialog**: Navigate depot structure to select paths
+- **RestoreDialog**: Select a specific snapshot revision to restore
+- **SaveOptionsDialog**: Configure save options (e.g., submit immediately to Perforce)
+- **UnsavedChangesDialog**: Prompt user to save changes before closing
+- **ProgressWindow**: Show progress during long-running operations
 
 ### 2. ViewModel Layer
 
@@ -64,19 +67,22 @@ class MainViewModel : INotifyPropertyChanged
 {
     // Properties
     ObservableCollection<StreamNode> StreamHierarchy { get; }
-    StreamNode SelectedStream { get; set; }
+    StreamNode? SelectedStream { get; set; }
     ObservableCollection<RuleViewModel> DisplayedRules { get; }
     RuleViewMode CurrentViewMode { get; set; } // Local, Inherited, All
-    
+    bool HasUnsavedChanges { get; set; }
+    string StreamPathInput { get; set; }
+    string ConnectionStatus { get; set; }
+
     // Commands
     ICommand LoadStreamCommand { get; }
     ICommand AddRuleCommand { get; }
     ICommand EditRuleCommand { get; }
     ICommand DeleteRuleCommand { get; }
     ICommand CreateSnapshotCommand { get; }
-    ICommand OpenHistoryCommand { get; }
+    ICommand ConnectCommand { get; }
     ICommand OpenSettingsCommand { get; }
-    
+
     // Methods
     void LoadStreamHierarchy(string streamPath)
     void RefreshRuleDisplay()
@@ -96,20 +102,6 @@ class RuleViewModel : INotifyPropertyChanged
 }
 ```
 
-#### HistoryViewModel
-```csharp
-class HistoryViewModel : INotifyPropertyChanged
-{
-    ObservableCollection<SnapshotInfo> Snapshots { get; }
-    SnapshotInfo SelectedSnapshot { get; set; }
-    SnapshotInfo ComparisonSnapshot { get; set; }
-    ObservableCollection<RuleDiff> DiffResults { get; }
-    
-    ICommand LoadHistoryCommand { get; }
-    ICommand CompareSnapshotsCommand { get; }
-    ICommand RestoreSnapshotCommand { get; }
-}
-```
 
 ### 3. Service Layer
 
@@ -145,16 +137,14 @@ Manages snapshot creation, storage, and retrieval:
 class SnapshotService
 {
     // Snapshot Operations
-    Snapshot CreateSnapshot(string streamPath, List<StreamRule> rules)
+    Snapshot CreateSnapshot(StreamNode streamNode)
+    Snapshot CreateHierarchySnapshot(StreamNode rootNode)
     void SaveSnapshot(Snapshot snapshot, string historyPath)
     List<Snapshot> LoadHistory(string streamPath, string historyPath)
-    
+
     // Comparison and Restore
     SnapshotDiff CompareSnapshots(Snapshot snapshot1, Snapshot snapshot2)
     void RestoreSnapshot(string streamPath, Snapshot snapshot)
-    
-    // Retention Management
-    void ApplyRetentionPolicy(string streamPath, RetentionPolicy policy)
 }
 ```
 
@@ -199,11 +189,15 @@ class StreamRule
 ```csharp
 class Snapshot
 {
-    string StreamPath { get; set; }
-    DateTime Timestamp { get; set; }
-    string CreatedBy { get; set; }
-    List<StreamRule> Rules { get; set; }
-    string Description { get; set; }
+    // New format: Rules organized by stream path for hierarchy support
+    Dictionary<string, List<StreamRule>>? StreamRules { get; set; }
+
+    // Legacy format: Flattened list of rules (for backward compatibility)
+    List<StreamRule>? Rules { get; set; }
+
+    // Methods for accessing rules (handle both formats)
+    List<StreamRule> GetAllRules()
+    List<StreamRule> GetRulesForStream(string streamPath)
 }
 ```
 
@@ -223,13 +217,35 @@ class RuleChange
 }
 ```
 
+#### FileRevisionInfo
+```csharp
+class FileRevisionInfo
+{
+    int Revision { get; set; }
+    DateTime DateTime { get; set; }
+    string User { get; set; }
+    string Action { get; set; }
+    string Description { get; set; }
+}
+```
+
+#### RuleChangeInfo
+```csharp
+class RuleChangeInfo
+{
+    StreamRule Rule { get; set; }
+    string ChangeType { get; set; } // "added", "removed", "modified"
+    string StreamPath { get; set; }
+}
+```
+
 #### AppSettings
 ```csharp
 class AppSettings
 {
     P4ConnectionSettings Connection { get; set; }
     string HistoryStoragePath { get; set; }
-    RetentionPolicy Retention { get; set; }
+    string? LastUsedStream { get; set; }
 }
 
 class P4ConnectionSettings
@@ -237,12 +253,7 @@ class P4ConnectionSettings
     string Server { get; set; }
     string Port { get; set; }
     string User { get; set; }
-}
-
-class RetentionPolicy
-{
-    int MaxSnapshots { get; set; }
-    int MaxAgeDays { get; set; }
+    string? Password { get; set; }
 }
 ```
 
@@ -250,33 +261,47 @@ class RetentionPolicy
 
 ### JSON Snapshot Format
 
-Each stream has its own JSON history file stored in the depot at the configured history path. The file contains an array of snapshots:
+Each history file stores multiple snapshots. The file is versioned by Perforce to provide history tracking.
 
+**Current Format (Hierarchy-based)**: Snapshots include rules organized by stream path:
 ```json
 {
-  "streamPath": "//depot/main/dev",
-  "snapshots": [
+  "streamRules": {
+    "//depot/main": [
+      {
+        "type": "ignore",
+        "path": "//depot/main/temp/...",
+        "remapTarget": null,
+        "sourceStream": "//depot/main"
+      }
+    ],
+    "//depot/main/dev": [
+      {
+        "type": "ignore",
+        "path": "//depot/main/dev/build/...",
+        "remapTarget": null,
+        "sourceStream": "//depot/main/dev"
+      }
+    ]
+  }
+}
+```
+
+**Legacy Format (Backward Compatible)**: Old snapshots contain a flat list of rules:
+```json
+{
+  "rules": [
     {
-      "timestamp": "2026-01-07T10:30:00Z",
-      "createdBy": "john.doe",
-      "description": "Before refactoring",
-      "rules": [
-        {
-          "type": "ignore",
-          "path": "//depot/main/dev/temp/...",
-          "sourceStream": "//depot/main/dev"
-        },
-        {
-          "type": "remap",
-          "path": "//depot/main/dev/lib/...",
-          "remapTarget": "//depot/shared/lib/...",
-          "sourceStream": "//depot/main"
-        }
-      ]
+      "type": "ignore",
+      "path": "//depot/main/dev/temp/...",
+      "remapTarget": null,
+      "sourceStream": "//depot/main/dev"
     }
   ]
 }
 ```
+
+Both formats are supported - the Snapshot class handles deserialization of both and provides methods to access rules consistently.
 
 ### Stream Hierarchy Data Structure
 
@@ -344,7 +369,6 @@ function GetInheritedRules(stream):
 - **History File Not Found**: Create new history file for stream
 - **JSON Parse Error**: Log error, show corrupted file message, offer to create new history
 - **Depot Write Failure**: Show error, suggest checking permissions and disk space
-- **Retention Policy Failure**: Log warning, continue operation
 
 ### UI Error Handling
 - **Invalid Path Entry**: Validate paths before submission, show validation errors
@@ -361,23 +385,22 @@ All errors are logged to a local file with:
 ## Testing Strategy
 
 ### Unit Tests
-The application will use NUnit for unit testing with the following focus areas:
+The application uses NUnit for unit testing with focus on:
 
 **Service Layer Tests**:
-- P4Service: Mock P4API.NET calls, test connection handling, stream retrieval, rule updates
-- SnapshotService: Test JSON serialization/deserialization, snapshot comparison logic, retention policy application
-- SettingsService: Test settings persistence and retrieval
+- SettingsService: Settings persistence and retrieval
+- P4Service: Connection handling, stream operations (with mocked P4 calls)
+- SnapshotService: JSON serialization/deserialization, snapshot creation and comparison
 
 **Model Tests**:
-- StreamNode: Test hierarchy building, rule inheritance algorithm
-- SnapshotDiff: Test diff calculation logic
+- StreamNode: Hierarchy building, rule inheritance algorithm
+- StreamRule: Equality and comparison logic
 
 **ViewModel Tests**:
-- MainViewModel: Test command execution, view mode switching, rule filtering
-- HistoryViewModel: Test snapshot loading, comparison, restore operations
+- MainViewModel: Command execution, view mode switching, rule filtering
 
 ### Property-Based Tests
-Property-based tests will verify universal correctness properties using FsCheck (C# property testing library). Each property test will run a minimum of 100 iterations with randomized inputs.
+Property-based testing with FsCheck is planned for comprehensive validation of correctness properties. Framework is included in dependencies but tests have not been fully implemented yet.
 
 
 ## Correctness Properties
@@ -459,18 +482,20 @@ The following properties will be validated using property-based testing with FsC
 **Validates: Requirements 9.1, 9.2**
 
 ### Property 19: Settings Persistence Round-Trip
-*For any* valid application settings (connection parameters, history path, retention policy), saving the settings and then loading them should produce equivalent settings with all values preserved.
+*For any* valid application settings (connection parameters, history path), saving the settings and then loading them should produce equivalent settings with all values preserved.
 **Validates: Requirements 10.2, 10.5**
 
 
 ## Implementation Notes
 
 ### P4API.NET Integration
-The application will use P4API.NET NuGet package for all Perforce operations. Key classes to use:
-- `P4Server`: Connection management
-- `P4Command`: Execute Perforce commands
+The application uses P4API.NET (v2025.2.287.2434) for all Perforce operations. Key classes:
+- `Server`: Connection management with `ServerAddress`
+- `Repository`: Access to Perforce repository operations
+- `Connection`: Manages authentication and connection state
 - `Stream`: Stream object representation
 - `FileSpec`: File and depot path specifications
+- `Credential`: Authentication handling
 
 ### WPF MVVM Implementation
 - Use `INotifyPropertyChanged` for property change notifications
@@ -487,11 +512,53 @@ Store application settings in user's AppData folder using JSON format for easy e
 ### Performance Considerations
 - Cache stream hierarchy after initial load
 - Lazy-load rule details only when stream is selected
-- Use background workers for long-running Perforce operations with progress reporting
-- Limit history file size through retention policy
+- Use Task.Run for long-running Perforce operations with UI thread marshaling
+- Display progress windows for operations > 1 second
 
 ### Security Considerations
 - Store Perforce credentials securely (consider Windows Credential Manager)
 - Validate all user inputs before Perforce operations
 - Sanitize depot paths to prevent injection attacks
 - Log all rule modifications for audit trail
+
+## Implementation Status & Deviations from Design
+
+### Completed Features
+- MVVM architecture with WPF
+- P4API.NET integration for Perforce operations
+- Stream hierarchy visualization and navigation
+- Rule management (add, edit, delete) for local and inherited rules
+- Multiple view modes (Local, Inherited, All)
+- Snapshot creation and storage in depot
+- Settings persistence
+- Basic error handling and logging
+- Unit tests for core services
+
+### Removed Features
+- **RetentionPolicy**: Not implemented. Manual snapshots are stored in depot; Perforce's native file versioning provides history management
+- **HistoryWindow/HistoryViewModel**: Replaced with RestoreDialog for simpler history navigation and restoration
+
+### Evolved/Extended Features
+- **Snapshot Model**: Enhanced to support both hierarchy-based snapshots (multiple streams) and legacy single-stream snapshots for backward compatibility
+- **Save Options**: Added SaveOptionsDialog to allow users to choose whether to immediately submit snapshot files to Perforce
+- **Unsaved Changes Detection**: Added UnsavedChangesDialog to warn users before closing with pending changes
+- **Settings**: Added `LastUsedStream` and `Password` fields to improve UX
+
+### Incomplete Features
+- **Property-Based Testing**: FsCheck is included in dependencies but comprehensive property-based tests have not been implemented yet
+- **Full Async Implementation**: Currently uses synchronous P4 operations with Task.Run for UI responsiveness; could be enhanced with async/await throughout
+
+### New Components Added
+- **FileRevisionInfo**: Model for depot file revision information
+- **RuleChangeInfo**: Model for tracking rule changes
+- **RestoreDialog**: Dialog for selecting snapshot revisions to restore
+- **SaveOptionsDialog**: Dialog for save options configuration
+- **UnsavedChangesDialog**: Dialog for unsaved changes warning
+- **ProgressWindow**: Generic progress display for long operations
+- **LoggingService**: Centralized logging to file and console
+
+### Key Implementation Decisions
+1. **Snapshot Storage**: Snapshots are stored as JSON files in the depot at a configured path. P4's native file versioning automatically provides history tracking without needing a custom retention policy.
+2. **Hierarchy Snapshots**: The snapshot system evolved to capture rules for entire stream hierarchies, enabling restore operations that preserve the complete rule configuration across all child streams.
+3. **Backward Compatibility**: The Snapshot model supports both new (dictionary-based) and legacy (list-based) formats to ensure existing snapshot files remain readable.
+4. **Synchronous Operations**: UI operations remain synchronous with progress indicators, simplifying the control flow compared to full async implementation.
