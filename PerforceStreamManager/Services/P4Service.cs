@@ -17,6 +17,7 @@ namespace PerforceStreamManager.Services
         private Repository? _repository;
         private Connection? _connection;
         private P4ConnectionSettings? _settings;
+        private int? _serverVersion; // Cached server version (e.g., 2019, 2020, 2021)
 
         public P4Service(LoggingService loggingService)
         {
@@ -130,6 +131,7 @@ namespace PerforceStreamManager.Services
                 _repository = null;
                 _server = null;
                 _settings = null;
+                _serverVersion = null; // Clear cached server version
             }
             catch (Exception ex)
             {
@@ -139,6 +141,7 @@ namespace PerforceStreamManager.Services
                 _repository = null;
                 _server = null;
                 _settings = null;
+                _serverVersion = null;
             }
         }
 
@@ -154,6 +157,46 @@ namespace PerforceStreamManager.Services
                 _loggingService.LogError(ex, "EnsureConnected");
                 throw ex;
             }
+        }
+
+        /// <summary>
+        /// Gets the Perforce server version year (e.g., 2019, 2020, 2021)
+        /// </summary>
+        /// <returns>Server version year, or null if unable to determine</returns>
+        private int? GetServerVersion()
+        {
+            // Return cached version if available
+            if (_serverVersion.HasValue)
+                return _serverVersion;
+
+            if (!IsConnected)
+                return null;
+
+            try
+            {
+                var serverMetadata = _repository!.Server.Metadata;
+                if (serverMetadata != null)
+                {
+                    // Get version string - format is typically "2020.1/1966006" or similar
+                    var versionString = serverMetadata.Version?.ToString() ?? "";
+                    _loggingService.LogInfo($"Server version string: {versionString}");
+                    
+                    // Try to extract year from version string (e.g., "2020.1" -> 2020)
+                    var match = System.Text.RegularExpressions.Regex.Match(versionString, @"(\d{4})");
+                    if (match.Success && int.TryParse(match.Groups[1].Value, out int year))
+                    {
+                        _serverVersion = year;
+                        _loggingService.LogInfo($"Detected Perforce server version year: {year}");
+                        return year;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogInfo($"Failed to detect server version: {ex.Message}");
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -492,20 +535,35 @@ namespace PerforceStreamManager.Services
                     stream.Paths = cleanPaths;
                 }
 
-                Type streamType = typeof(Stream);
+                // Get server version to determine if reflection workaround is needed
+                int? serverVersion = GetServerVersion();
                 
-                System.Reflection.FieldInfo field = streamType.GetField("StreamSpecFormatPre202", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-                if (field != null)
+                // Only apply reflection workaround for servers older than 2020
+                // This was needed for older P4API.NET versions to properly format Remapped/Ignored sections
+                if (serverVersion.HasValue && serverVersion.Value < 2020)
                 {
-                    var original = field.GetValue(stream) as string;
-                    if (!string.IsNullOrEmpty(original))
+                    _loggingService.LogInfo($"Applying reflection workaround for server version {serverVersion.Value}");
+                    
+                    Type streamType = typeof(Stream);
+                    
+                    System.Reflection.FieldInfo? field = streamType.GetField("StreamSpecFormatPre202", 
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+                    if (field != null)
                     {
-                        var newFormat = "Stream:\t{0}\n\nUpdate:\t{1}\n\nAccess:\t{2}\n\nOwner:\t{3}\n\nName:\t{4}\n\nParent:\t{5}\n\nType:\t{6}\n\nDescription:\n\t{7}\n\nOptions:\t{8}\n\n\nPaths:\n\t{9}\n\nRemapped:\n\t{10}\n\nIgnored:\n\t{11}\n\n{12}";
-                        field.SetValue(stream, newFormat); 
+                        var original = field.GetValue(stream) as string;
+                        if (!string.IsNullOrEmpty(original))
+                        {
+                            var newFormat = "Stream:\t{0}\n\nUpdate:\t{1}\n\nAccess:\t{2}\n\nOwner:\t{3}\n\nName:\t{4}\n\nParent:\t{5}\n\nType:\t{6}\n\nDescription:\n\t{7}\n\nOptions:\t{8}\n\n\nPaths:\n\t{9}\n\nRemapped:\n\t{10}\n\nIgnored:\n\t{11}\n\n{12}";
+                            field.SetValue(stream, newFormat); 
+                        }
                     }
                 }
+                else
+                {
+                    _loggingService.LogInfo($"Server version {serverVersion?.ToString() ?? "unknown"} - skipping reflection workaround");
+                }
+                
                 // Save the stream
                 _repository!.UpdateStream(stream);
             }
