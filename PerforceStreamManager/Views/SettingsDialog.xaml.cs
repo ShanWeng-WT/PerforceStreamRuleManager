@@ -127,9 +127,20 @@ public partial class SettingsDialog : Window
                     {
                         ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Red;
                         ConnectionStatusText.Text = "Connection Failed";
-                        string safeMessage = _errorSanitizer.SanitizeForUser(ex, "TestConnection");
-                        MessageBox.Show(safeMessage, "Test Result",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
+
+                        // Check if this is a rate limiting error
+                        if (ex.Message.Contains("Too many failed connection attempts"))
+                        {
+                            // Show the rate limit message directly (it's user-friendly)
+                            MessageBox.Show(ex.Message, "Rate Limited",
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                        else
+                        {
+                            string safeMessage = _errorSanitizer.SanitizeForUser(ex, "TestConnection");
+                            MessageBox.Show(safeMessage, "Test Result",
+                                MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
                     });
                 }
                 finally

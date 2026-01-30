@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace PerforceStreamManager.Models
 {
     /// <summary>
@@ -27,11 +29,31 @@ namespace PerforceStreamManager.Models
         /// </summary>
         public int SessionTimeoutMinutes { get; set; }
 
+        /// <summary>
+        /// Whether to validate SSL/TLS certificates when connecting to Perforce.
+        /// Default is true for security.
+        /// </summary>
+        public bool ValidateSslCertificates { get; set; }
+
+        /// <summary>
+        /// List of trusted SSL certificate fingerprints for self-signed certificates.
+        /// </summary>
+        public List<string> TrustedCertificateFingerprints { get; set; }
+
+        /// <summary>
+        /// Whether connection rate limiting is enabled to prevent brute force attacks.
+        /// Default is true.
+        /// </summary>
+        public bool RateLimitingEnabled { get; set; }
+
         public AppSettings()
         {
             Connection = new P4ConnectionSettings();
             HistoryStoragePath = "stream-history";
             SessionTimeoutMinutes = 30; // Default 30 minutes
+            ValidateSslCertificates = true; // Default enabled for security
+            TrustedCertificateFingerprints = new List<string>();
+            RateLimitingEnabled = true; // Default enabled for security
         }
     }
 

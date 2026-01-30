@@ -15,6 +15,8 @@ namespace PerforceStreamManager.Services
     {
         private readonly LoggingService _loggingService;
         public LoggingService Logger => _loggingService;
+        private readonly ConnectionRateLimiter _rateLimiter;
+        private bool _rateLimitingEnabled = true;
         private Server? _server;
         private Repository? _repository;
         private Connection? _connection;
@@ -36,6 +38,7 @@ namespace PerforceStreamManager.Services
         public P4Service(LoggingService loggingService)
         {
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
+            _rateLimiter = new ConnectionRateLimiter();
         }
 
         // Keep default constructor for now but it's deprecated
@@ -67,6 +70,21 @@ namespace PerforceStreamManager.Services
                 _loggingService.LogInfo($"Session timeout set to {timeoutMinutes} minutes");
             }
         }
+
+        /// <summary>
+        /// Configures connection rate limiting. Call this before Connect() to enable/disable.
+        /// </summary>
+        /// <param name="enabled">Whether to enable rate limiting</param>
+        public void SetRateLimiting(bool enabled)
+        {
+            _rateLimitingEnabled = enabled;
+            _loggingService.LogInfo($"Connection rate limiting {(enabled ? "enabled" : "disabled")}");
+        }
+
+        /// <summary>
+        /// Gets the current rate limiter instance (for UI feedback).
+        /// </summary>
+        public ConnectionRateLimiter RateLimiter => _rateLimiter;
 
         /// <summary>
         /// Initializes the session inactivity timer.
@@ -145,6 +163,15 @@ namespace PerforceStreamManager.Services
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
+            // Check rate limiting
+            if (_rateLimitingEnabled && !_rateLimiter.CanAttemptConnection(out TimeSpan waitTime))
+            {
+                int waitSeconds = (int)Math.Ceiling(waitTime.TotalSeconds);
+                string message = $"Too many failed connection attempts. Please wait {waitSeconds} seconds before trying again.";
+                _loggingService.LogWarning($"Connection rate limited. Wait time: {waitSeconds}s");
+                throw new Exception(message);
+            }
+
             try
             {
                 _loggingService.LogInfo($"Connecting to Perforce server: {settings.Server}:{settings.Port}, User: {settings.User}");
@@ -163,6 +190,20 @@ namespace PerforceStreamManager.Services
                 // Create server instance
                 _server = new Server(new ServerAddress(serverUri));
 
+                // SSL/TLS Configuration
+                // Note: P4API.NET has limited support for custom SSL certificate validation.
+                // For ssl: connections, the library uses the system's certificate store by default.
+                // To use self-signed certificates:
+                // 1. Add the certificate to the Windows certificate store, OR
+                // 2. Use P4 trust commands: p4 trust -y -f <fingerprint>
+                // Future enhancement: Add programmatic certificate validation when P4API.NET supports it
+                if (serverUri.StartsWith("ssl:", StringComparison.OrdinalIgnoreCase))
+                {
+                    _loggingService.LogInfo("SSL connection detected. Using system certificate store for validation.");
+                    // TODO: Implement custom certificate validation when P4API.NET API is available
+                    // For now, certificates must be trusted via Windows certificate store or p4 trust command
+                }
+
                 // Create repository
                 _repository = new Repository(_server);
 
@@ -172,9 +213,9 @@ namespace PerforceStreamManager.Services
                 // Set user and client
                 _connection.UserName = settings.User;
                 _connection.Client = new Client();
-                
 
-                
+
+
                 // Connect to the server
                 _connection.Connect(null);
 
@@ -196,12 +237,23 @@ namespace PerforceStreamManager.Services
 
                 _loggingService.LogInfo("Successfully connected to Perforce.");
 
+                // Record successful connection for rate limiting
+                if (_rateLimitingEnabled)
+                {
+                    _rateLimiter.RecordSuccessfulConnection();
+                }
+
                 // Initialize session timeout timer
                 InitializeSessionTimer();
             }
             catch (P4Exception ex)
             {
                 _loggingService.LogError(ex, "Connect");
+                // Record failed attempt for rate limiting
+                if (_rateLimitingEnabled)
+                {
+                    _rateLimiter.RecordFailedAttempt();
+                }
                 // Clean up on failure
                 Disconnect();
                 throw new Exception($"Failed to connect to Perforce server: {ex.Message}", ex);
@@ -209,6 +261,11 @@ namespace PerforceStreamManager.Services
             catch (Exception ex)
             {
                 _loggingService.LogError(ex, "Connect");
+                // Don't record rate limit for non-auth errors (like rate limit exception itself)
+                if (_rateLimitingEnabled && !ex.Message.Contains("Too many failed connection attempts"))
+                {
+                    _rateLimiter.RecordFailedAttempt();
+                }
                 // Clean up on failure
                 Disconnect();
                 throw new Exception($"Unexpected error connecting to Perforce: {ex.Message}", ex);
@@ -228,6 +285,15 @@ namespace PerforceStreamManager.Services
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
+            // Check rate limiting
+            if (_rateLimitingEnabled && !_rateLimiter.CanAttemptConnection(out TimeSpan waitTime))
+            {
+                int waitSeconds = (int)Math.Ceiling(waitTime.TotalSeconds);
+                string message = $"Too many failed connection attempts. Please wait {waitSeconds} seconds before trying again.";
+                _loggingService.LogWarning($"Connection rate limited. Wait time: {waitSeconds}s");
+                throw new Exception(message);
+            }
+
             try
             {
                 _loggingService.LogInfo($"Connecting to Perforce server: {settings.Server}:{settings.Port}, User: {settings.User}");
@@ -245,6 +311,20 @@ namespace PerforceStreamManager.Services
 
                 // Create server instance
                 _server = new Server(new ServerAddress(serverUri));
+
+                // SSL/TLS Configuration
+                // Note: P4API.NET has limited support for custom SSL certificate validation.
+                // For ssl: connections, the library uses the system's certificate store by default.
+                // To use self-signed certificates:
+                // 1. Add the certificate to the Windows certificate store, OR
+                // 2. Use P4 trust commands: p4 trust -y -f <fingerprint>
+                // Future enhancement: Add programmatic certificate validation when P4API.NET supports it
+                if (serverUri.StartsWith("ssl:", StringComparison.OrdinalIgnoreCase))
+                {
+                    _loggingService.LogInfo("SSL connection detected. Using system certificate store for validation.");
+                    // TODO: Implement custom certificate validation when P4API.NET API is available
+                    // For now, certificates must be trusted via Windows certificate store or p4 trust command
+                }
 
                 // Create repository
                 _repository = new Repository(_server);
@@ -288,12 +368,23 @@ namespace PerforceStreamManager.Services
 
                 _loggingService.LogInfo("Successfully connected to Perforce.");
 
+                // Record successful connection for rate limiting
+                if (_rateLimitingEnabled)
+                {
+                    _rateLimiter.RecordSuccessfulConnection();
+                }
+
                 // Initialize session timeout timer
                 InitializeSessionTimer();
             }
             catch (P4Exception ex)
             {
                 _loggingService.LogError(ex, "Connect");
+                // Record failed attempt for rate limiting
+                if (_rateLimitingEnabled)
+                {
+                    _rateLimiter.RecordFailedAttempt();
+                }
                 // Clean up on failure
                 Disconnect();
                 throw new Exception($"Failed to connect to Perforce server: {ex.Message}", ex);
@@ -301,6 +392,11 @@ namespace PerforceStreamManager.Services
             catch (Exception ex)
             {
                 _loggingService.LogError(ex, "Connect");
+                // Don't record rate limit for non-auth errors (like rate limit exception itself)
+                if (_rateLimitingEnabled && !ex.Message.Contains("Too many failed connection attempts"))
+                {
+                    _rateLimiter.RecordFailedAttempt();
+                }
                 // Clean up on failure
                 Disconnect();
                 throw new Exception($"Unexpected error connecting to Perforce: {ex.Message}", ex);

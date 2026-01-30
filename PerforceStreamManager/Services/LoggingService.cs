@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 namespace PerforceStreamManager.Services
 {
@@ -14,6 +15,8 @@ namespace PerforceStreamManager.Services
         private const string EventLogName = "Application";
         private bool _fileLoggingHealthy = true;
         private bool _eventLogAvailable;
+        private const long MaxLogFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+        private const int MaxArchivedLogs = 5;
 
         /// <summary>
         /// Gets the path to the log file.
@@ -130,6 +133,9 @@ namespace PerforceStreamManager.Services
             {
                 try
                 {
+                    // Check if log rotation is needed
+                    RotateLogIfNeeded();
+
                     File.AppendAllText(_logPath, message);
                     loggedSuccessfully = true;
                 }
@@ -186,6 +192,80 @@ namespace PerforceStreamManager.Services
         /// Gets whether file logging is currently working.
         /// </summary>
         public bool IsFileLoggingHealthy => _fileLoggingHealthy;
+
+        /// <summary>
+        /// Rotates the log file if it exceeds the maximum size.
+        /// Archives old logs and keeps only the most recent ones.
+        /// </summary>
+        private void RotateLogIfNeeded()
+        {
+            try
+            {
+                if (!File.Exists(_logPath))
+                    return;
+
+                var fileInfo = new FileInfo(_logPath);
+                if (fileInfo.Length < MaxLogFileSizeBytes)
+                    return;
+
+                // Archive the current log
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string archivePath = Path.Combine(
+                    Path.GetDirectoryName(_logPath) ?? "",
+                    $"application_{timestamp}.log"
+                );
+
+                File.Move(_logPath, archivePath);
+
+                // Clean up old archives
+                CleanupOldArchives();
+
+                // Create a new log file with a rotation message
+                File.WriteAllText(_logPath,
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] INFO: Log rotated. Previous log archived to {Path.GetFileName(archivePath)}\n");
+            }
+            catch
+            {
+                // If rotation fails, just continue - the file will keep growing
+                // This is better than stopping logging entirely
+            }
+        }
+
+        /// <summary>
+        /// Removes old archived log files, keeping only the most recent ones.
+        /// </summary>
+        private void CleanupOldArchives()
+        {
+            try
+            {
+                string logDirectory = Path.GetDirectoryName(_logPath) ?? "";
+                if (!Directory.Exists(logDirectory))
+                    return;
+
+                // Find all archived logs
+                var archivedLogs = Directory.GetFiles(logDirectory, "application_*.log")
+                    .Select(f => new FileInfo(f))
+                    .OrderByDescending(f => f.CreationTime)
+                    .ToList();
+
+                // Delete old archives beyond the maximum
+                foreach (var oldLog in archivedLogs.Skip(MaxArchivedLogs))
+                {
+                    try
+                    {
+                        oldLog.Delete();
+                    }
+                    catch
+                    {
+                        // Ignore errors deleting old logs
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore errors during cleanup
+            }
+        }
 
         /// <summary>
         /// Attempts to repair file logging by retrying access to the log file.
