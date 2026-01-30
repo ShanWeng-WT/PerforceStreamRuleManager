@@ -3,6 +3,7 @@ using PerforceStreamManager.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security;
 
 namespace PerforceStreamManager.Services
 {
@@ -17,7 +18,7 @@ namespace PerforceStreamManager.Services
         private Repository? _repository;
         private Connection? _connection;
         private P4ConnectionSettings? _settings;
-        private int? _serverVersion; // Cached server version (e.g., 2019, 2020, 2021)
+        private DateTime? _serverVersionTime; // Cached server version (e.g., 2019, 2020, 2021)
 
         public P4Service(LoggingService loggingService)
         {
@@ -113,6 +114,95 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
+        /// Connects to Perforce server with the specified settings and SecureString password.
+        /// This is the preferred method for connecting as it keeps the password more secure.
+        /// </summary>
+        /// <param name="settings">Connection settings (password field is ignored)</param>
+        /// <param name="securePassword">SecureString containing the password</param>
+        /// <exception cref="ArgumentNullException">Thrown when settings is null</exception>
+        /// <exception cref="Exception">Thrown when connection fails</exception>
+        public void Connect(P4ConnectionSettings settings, SecureString securePassword)
+        {
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+
+            try
+            {
+                _loggingService.LogInfo($"Connecting to Perforce server: {settings.Server}:{settings.Port}, User: {settings.User}");
+
+                // Disconnect if already connected
+                if (IsConnected)
+                {
+                    Disconnect();
+                }
+
+                _settings = settings;
+
+                // Create server URI
+                string serverUri = $"{settings.Server}:{settings.Port}";
+
+                // Create server instance
+                _server = new Server(new ServerAddress(serverUri));
+
+                // Create repository
+                _repository = new Repository(_server);
+
+                // Create connection
+                _connection = _repository.Connection;
+
+                // Set user and client
+                _connection.UserName = settings.User;
+                _connection.Client = new Client();
+
+                // Connect to the server
+                _connection.Connect(null);
+
+                // Login with SecureString password
+                Credential? credential;
+                if (securePassword != null && securePassword.Length > 0)
+                {
+                    // Convert SecureString to string only when needed for P4API
+                    string password = SecureCredentialManager.ToPlainString(securePassword);
+                    try
+                    {
+                        credential = _connection.Login(password);
+                    }
+                    finally
+                    {
+                        // Clear the password string from the interned string pool is not possible,
+                        // but we can at least clear our reference
+                        password = null;
+                    }
+                }
+                else
+                {
+                    credential = _connection.Login(null);
+                }
+
+                if (credential == null)
+                {
+                    throw new Exception("Authentication failed. Please check your credentials.");
+                }
+
+                _loggingService.LogInfo("Successfully connected to Perforce.");
+            }
+            catch (P4Exception ex)
+            {
+                _loggingService.LogError(ex, "Connect");
+                // Clean up on failure
+                Disconnect();
+                throw new Exception($"Failed to connect to Perforce server: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError(ex, "Connect");
+                // Clean up on failure
+                Disconnect();
+                throw new Exception($"Unexpected error connecting to Perforce: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Disconnects from the Perforce server
         /// </summary>
         public void Disconnect()
@@ -131,7 +221,7 @@ namespace PerforceStreamManager.Services
                 _repository = null;
                 _server = null;
                 _settings = null;
-                _serverVersion = null; // Clear cached server version
+                _serverVersionTime = null; // Clear cached server version
             }
             catch (Exception ex)
             {
@@ -141,7 +231,7 @@ namespace PerforceStreamManager.Services
                 _repository = null;
                 _server = null;
                 _settings = null;
-                _serverVersion = null;
+                _serverVersionTime = null;
             }
         }
 
@@ -163,33 +253,18 @@ namespace PerforceStreamManager.Services
         /// Gets the Perforce server version year (e.g., 2019, 2020, 2021)
         /// </summary>
         /// <returns>Server version year, or null if unable to determine</returns>
-        private int? GetServerVersion()
+        private DateTime? GetServerVersionTime()
         {
             // Return cached version if available
-            if (_serverVersion.HasValue)
-                return _serverVersion;
+            if (_serverVersionTime.HasValue)
+                return _serverVersionTime;
 
             if (!IsConnected)
                 return null;
 
             try
             {
-                var serverMetadata = _repository!.Server.Metadata;
-                if (serverMetadata != null)
-                {
-                    // Get version string - format is typically "2020.1/1966006" or similar
-                    var versionString = serverMetadata.Version?.ToString() ?? "";
-                    _loggingService.LogInfo($"Server version string: {versionString}");
-                    
-                    // Try to extract year from version string (e.g., "2020.1" -> 2020)
-                    var match = System.Text.RegularExpressions.Regex.Match(versionString, @"(\d{4})");
-                    if (match.Success && int.TryParse(match.Groups[1].Value, out int year))
-                    {
-                        _serverVersion = year;
-                        _loggingService.LogInfo($"Detected Perforce server version year: {year}");
-                        return year;
-                    }
-                }
+                return _repository!.Server?.Metadata?.Version?.Date;
             }
             catch (Exception ex)
             {
@@ -226,13 +301,14 @@ namespace PerforceStreamManager.Services
         /// <param name="streamPath">Full depot path of the stream (e.g., //depot/main)</param>
         /// <returns>Stream object from P4API.NET</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when stream path is invalid</exception>
         /// <exception cref="Exception">Thrown when stream retrieval fails</exception>
         public Stream GetStream(string streamPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(streamPath))
-                throw new ArgumentException("Stream path cannot be null or empty", nameof(streamPath));
+            // Validate stream path for security
+            P4InputValidator.ValidateStreamPathOrThrow(streamPath, nameof(streamPath));
 
             try
             {
@@ -256,20 +332,21 @@ namespace PerforceStreamManager.Services
         /// <param name="rootStreamPath">Full depot path of the root stream</param>
         /// <returns>List of StreamNode objects representing the hierarchy</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when stream path is invalid</exception>
         /// <exception cref="Exception">Thrown when hierarchy retrieval fails</exception>
         public List<StreamNode> GetStreamHierarchy(string rootStreamPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(rootStreamPath))
-                throw new ArgumentException("Root stream path cannot be null or empty", nameof(rootStreamPath));
+            // Validate stream path for security
+            P4InputValidator.ValidateStreamPathOrThrow(rootStreamPath, nameof(rootStreamPath));
 
             try
             {
                 _loggingService.LogInfo($"Loading stream hierarchy from root: {rootStreamPath}");
                 var rootStream = GetStream(rootStreamPath);
                 var rootNode = BuildStreamNode(rootStream, null);
-                
+
                 // Build hierarchy recursively
                 BuildChildHierarchy(rootNode);
 
@@ -356,13 +433,14 @@ namespace PerforceStreamManager.Services
         /// <param name="streamPath">Full depot path of the stream</param>
         /// <returns>List of StreamRule objects</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when stream path is invalid</exception>
         /// <exception cref="Exception">Thrown when rule retrieval fails</exception>
         public List<StreamRule> GetStreamRules(string streamPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(streamPath))
-                throw new ArgumentException("Stream path cannot be null or empty", nameof(streamPath));
+            // Validate stream path for security
+            P4InputValidator.ValidateStreamPathOrThrow(streamPath, nameof(streamPath));
 
             try
             {
@@ -473,13 +551,14 @@ namespace PerforceStreamManager.Services
         /// <param name="streamPath">Full depot path of the stream</param>
         /// <param name="rules">List of rules to set for the stream</param>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when stream path is invalid</exception>
         /// <exception cref="Exception">Thrown when update fails</exception>
         public void UpdateStreamRules(string streamPath, List<StreamRule> rules)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(streamPath))
-                throw new ArgumentException("Stream path cannot be null or empty", nameof(streamPath));
+            // Validate stream path for security
+            P4InputValidator.ValidateStreamPathOrThrow(streamPath, nameof(streamPath));
 
             if (rules == null)
                 throw new ArgumentNullException(nameof(rules));
@@ -536,13 +615,13 @@ namespace PerforceStreamManager.Services
                 }
 
                 // Get server version to determine if reflection workaround is needed
-                int? serverVersion = GetServerVersion();
+                var serverVersionTime = GetServerVersionTime();
                 
                 // Only apply reflection workaround for servers older than 2020
                 // This was needed for older P4API.NET versions to properly format Remapped/Ignored sections
-                if (serverVersion.HasValue && serverVersion.Value < 2020)
+                if (serverVersionTime.HasValue && serverVersionTime.Value.Year < 2020)
                 {
-                    _loggingService.LogInfo($"Applying reflection workaround for server version {serverVersion.Value}");
+                    _loggingService.LogInfo($"Applying reflection workaround for server version {serverVersionTime.Value}");
                     
                     Type streamType = typeof(Stream);
                     
@@ -561,7 +640,7 @@ namespace PerforceStreamManager.Services
                 }
                 else
                 {
-                    _loggingService.LogInfo($"Server version {serverVersion?.ToString() ?? "unknown"} - skipping reflection workaround");
+                    _loggingService.LogInfo($"Server version {serverVersionTime?.ToString() ?? "unknown"} - skipping reflection workaround");
                 }
                 
                 // Save the stream
@@ -587,13 +666,14 @@ namespace PerforceStreamManager.Services
         /// <param name="depotPath">Depot path to query (e.g., //depot/main/...)</param>
         /// <returns>List of depot file paths</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when depot path is invalid</exception>
         /// <exception cref="Exception">Thrown when file retrieval fails</exception>
         public List<string> GetDepotFiles(string depotPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(depotPath))
-                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+            // Validate depot path for security
+            P4InputValidator.ValidateDepotPathOrThrow(depotPath, nameof(depotPath));
 
             try
             {
@@ -637,13 +717,14 @@ namespace PerforceStreamManager.Services
         /// <param name="depotPath">Depot path to query (e.g., //depot/main/*)</param>
         /// <returns>List of depot directory paths</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when depot path is invalid</exception>
         /// <exception cref="Exception">Thrown when directory retrieval fails</exception>
         public List<string> GetDepotDirectories(string depotPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(depotPath))
-                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+            // Validate depot path for security
+            P4InputValidator.ValidateDepotPathOrThrow(depotPath, nameof(depotPath));
 
             try
             {
@@ -722,13 +803,14 @@ namespace PerforceStreamManager.Services
         /// <param name="depotPath">Full depot path to the file</param>
         /// <returns>File content as string</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when depot path is invalid</exception>
         /// <exception cref="Exception">Thrown when file read fails</exception>
         public string ReadDepotFile(string depotPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(depotPath))
-                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+            // Validate depot path for security
+            P4InputValidator.ValidateDepotPathOrThrow(depotPath, nameof(depotPath));
 
             try
             {
@@ -775,13 +857,14 @@ namespace PerforceStreamManager.Services
         /// <param name="content">Content to write</param>
         /// <param name="description">Changelist description</param>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when depot path is invalid</exception>
         /// <exception cref="Exception">Thrown when file write fails</exception>
         public void WriteDepotFile(string depotPath, string content, string description, bool submitImmediately = true)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(depotPath))
-                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+            // Validate depot path for security
+            P4InputValidator.ValidateDepotPathOrThrow(depotPath, nameof(depotPath));
 
             if (content == null)
                 throw new ArgumentNullException(nameof(content));
@@ -1117,8 +1200,12 @@ namespace PerforceStreamManager.Services
         public bool AutoDetectAndSwitchWorkspace(string streamPath)
         {
             EnsureConnected();
-            
+
             if (string.IsNullOrWhiteSpace(streamPath))
+                return false;
+
+            // Validate stream path for security
+            if (!P4InputValidator.ValidateStreamPath(streamPath, out _))
                 return false;
                 
             try
@@ -1213,13 +1300,14 @@ namespace PerforceStreamManager.Services
         /// <param name="depotPath">Full depot path to the file</param>
         /// <returns>List of FileRevisionInfo ordered by revision (newest first)</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when depot path is invalid</exception>
         /// <exception cref="Exception">Thrown when file history retrieval fails</exception>
         public List<Models.FileRevisionInfo> GetFileHistory(string depotPath)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(depotPath))
-                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+            // Validate depot path for security
+            P4InputValidator.ValidateDepotPathOrThrow(depotPath, nameof(depotPath));
 
             try
             {
@@ -1284,13 +1372,14 @@ namespace PerforceStreamManager.Services
         /// <param name="revision">Revision number to read</param>
         /// <returns>File content as string</returns>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when depot path is invalid</exception>
         /// <exception cref="Exception">Thrown when file read fails</exception>
         public string ReadDepotFileAtRevision(string depotPath, int revision)
         {
             EnsureConnected();
 
-            if (string.IsNullOrWhiteSpace(depotPath))
-                throw new ArgumentException("Depot path cannot be null or empty", nameof(depotPath));
+            // Validate depot path for security
+            P4InputValidator.ValidateDepotPathOrThrow(depotPath, nameof(depotPath));
 
             if (revision < 1)
                 throw new ArgumentException("Revision must be >= 1", nameof(revision));

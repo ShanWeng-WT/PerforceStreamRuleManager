@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="p4api.net" Version="2025.2.287.2434" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.2" />
     <PackageReference Include="System.Text.Json" Version="10.0.1" />
   </ItemGroup>
 
