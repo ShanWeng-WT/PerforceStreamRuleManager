@@ -9,14 +9,16 @@ public partial class SettingsDialog : Window
 {
     private readonly SettingsService _settingsService;
     private readonly P4Service _p4Service;
+    private readonly ErrorMessageSanitizer _errorSanitizer;
     private AppSettings _settings;
-    
+
     public SettingsDialog(SettingsService settingsService, P4Service p4Service)
     {
         InitializeComponent();
         _settingsService = settingsService;
         _p4Service = p4Service;
-        
+        _errorSanitizer = new ErrorMessageSanitizer(p4Service.Logger);
+
         LoadSettings();
         UpdateConnectionStatus();
     }
@@ -125,7 +127,8 @@ public partial class SettingsDialog : Window
                     {
                         ConnectionStatusIndicator.Fill = System.Windows.Media.Brushes.Red;
                         ConnectionStatusText.Text = "Connection Failed";
-                        MessageBox.Show($"Connection failed: {ex.Message}", "Test Result",
+                        string safeMessage = _errorSanitizer.SanitizeForUser(ex, "TestConnection");
+                        MessageBox.Show(safeMessage, "Test Result",
                             MessageBoxButton.OK, MessageBoxImage.Error);
                     });
                 }
@@ -144,11 +147,12 @@ public partial class SettingsDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to test connection: {ex.Message}", "Error",
+            string safeMessage = _errorSanitizer.SanitizeForUser(ex, "TestConnectionButton_Click");
+            MessageBox.Show(safeMessage, "Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
-    
+
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         // Validate inputs
@@ -214,11 +218,12 @@ public partial class SettingsDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to save settings: {ex.Message}", "Error",
+            string safeMessage = _errorSanitizer.SanitizeForUser(ex, "SaveSettings");
+            MessageBox.Show(safeMessage, "Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
-    
+
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;

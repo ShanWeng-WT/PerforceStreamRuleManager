@@ -9,18 +9,20 @@ namespace PerforceStreamManager.Views;
 public partial class DepotBrowserDialog : Window
 {
     private readonly P4Service _p4Service;
+    private readonly ErrorMessageSanitizer _errorSanitizer;
     private readonly string _rootPath;
     private readonly string _targetStream;
-    
+
     public string SelectedPath { get; private set; }
-    
+
     public DepotBrowserDialog(P4Service p4Service, string rootPath = null, string targetStream = null)
     {
         InitializeComponent();
         _p4Service = p4Service;
+        _errorSanitizer = new ErrorMessageSanitizer(p4Service.Logger);
         _rootPath = rootPath;
         _targetStream = targetStream;
-        
+
         Loaded += DepotBrowserDialog_Loaded;
     }
     
@@ -34,8 +36,9 @@ public partial class DepotBrowserDialog : Window
         }
         catch (Exception ex)
         {
-            StatusTextBlock.Text = $"Error: {ex.Message}";
-            MessageBox.Show($"Failed to load depot structure: {ex.Message}", 
+            string safeMessage = _errorSanitizer.SanitizeForUserSimple(ex, "DepotBrowserDialog_Loaded");
+            StatusTextBlock.Text = "Error loading depot structure";
+            MessageBox.Show(safeMessage,
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

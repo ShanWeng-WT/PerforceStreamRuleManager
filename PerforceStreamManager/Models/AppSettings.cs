@@ -21,10 +21,17 @@ namespace PerforceStreamManager.Models
         /// </summary>
         public string? LastUsedStream { get; set; }
 
+        /// <summary>
+        /// Session timeout in minutes. Idle sessions will be disconnected after this period.
+        /// Set to 0 to disable session timeout. Default is 30 minutes.
+        /// </summary>
+        public int SessionTimeoutMinutes { get; set; }
+
         public AppSettings()
         {
             Connection = new P4ConnectionSettings();
             HistoryStoragePath = "stream-history";
+            SessionTimeoutMinutes = 30; // Default 30 minutes
         }
     }
 

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security;
+using System.Timers;
 
 namespace PerforceStreamManager.Services
 {
@@ -20,6 +21,18 @@ namespace PerforceStreamManager.Services
         private P4ConnectionSettings? _settings;
         private DateTime? _serverVersionTime; // Cached server version (e.g., 2019, 2020, 2021)
 
+        // Session timeout fields
+        private DateTime _lastActivityTime;
+        private System.Timers.Timer? _sessionTimer;
+        private TimeSpan _sessionTimeout = TimeSpan.FromMinutes(30);
+        private bool _sessionTimeoutEnabled = true;
+
+        /// <summary>
+        /// Event raised when the session expires due to inactivity.
+        /// Handlers should perform cleanup and notify the user.
+        /// </summary>
+        public event EventHandler? OnSessionExpired;
+
         public P4Service(LoggingService loggingService)
         {
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
@@ -34,6 +47,92 @@ namespace PerforceStreamManager.Services
         /// Gets whether the service is currently connected to Perforce
         /// </summary>
         public bool IsConnected => _connection != null && _connection.Status == ConnectionStatus.Connected;
+
+        /// <summary>
+        /// Configures the session timeout. Call this before Connect() to set custom timeout.
+        /// </summary>
+        /// <param name="timeoutMinutes">Timeout in minutes. Set to 0 to disable timeout.</param>
+        public void SetSessionTimeout(int timeoutMinutes)
+        {
+            if (timeoutMinutes <= 0)
+            {
+                _sessionTimeoutEnabled = false;
+                _sessionTimeout = TimeSpan.Zero;
+                _loggingService.LogInfo("Session timeout disabled");
+            }
+            else
+            {
+                _sessionTimeoutEnabled = true;
+                _sessionTimeout = TimeSpan.FromMinutes(timeoutMinutes);
+                _loggingService.LogInfo($"Session timeout set to {timeoutMinutes} minutes");
+            }
+        }
+
+        /// <summary>
+        /// Initializes the session inactivity timer.
+        /// </summary>
+        private void InitializeSessionTimer()
+        {
+            if (!_sessionTimeoutEnabled)
+                return;
+
+            StopSessionTimer();
+
+            _lastActivityTime = DateTime.Now;
+            _sessionTimer = new System.Timers.Timer(60000); // Check every minute
+            _sessionTimer.Elapsed += OnSessionTimerElapsed;
+            _sessionTimer.AutoReset = true;
+            _sessionTimer.Start();
+
+            _loggingService.LogInfo($"Session timer started with {_sessionTimeout.TotalMinutes} minute timeout");
+        }
+
+        /// <summary>
+        /// Stops and disposes the session timer.
+        /// </summary>
+        private void StopSessionTimer()
+        {
+            if (_sessionTimer != null)
+            {
+                _sessionTimer.Stop();
+                _sessionTimer.Elapsed -= OnSessionTimerElapsed;
+                _sessionTimer.Dispose();
+                _sessionTimer = null;
+            }
+        }
+
+        /// <summary>
+        /// Timer elapsed handler - checks if session has timed out due to inactivity.
+        /// </summary>
+        private void OnSessionTimerElapsed(object? sender, ElapsedEventArgs e)
+        {
+            if (!IsConnected || !_sessionTimeoutEnabled)
+                return;
+
+            var idleTime = DateTime.Now - _lastActivityTime;
+            if (idleTime > _sessionTimeout)
+            {
+                _loggingService.LogInfo($"Session expired due to inactivity ({idleTime.TotalMinutes:F1} minutes idle)");
+
+                // Stop the timer to prevent multiple events
+                StopSessionTimer();
+
+                // Disconnect
+                Disconnect();
+
+                // Raise the event
+                OnSessionExpired?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Updates the last activity time to prevent session timeout.
+        /// Call this from methods that perform P4 operations.
+        /// </summary>
+        private void UpdateActivityTime()
+        {
+            _lastActivityTime = DateTime.Now;
+        }
 
         /// <summary>
         /// Connects to Perforce server with the specified settings
@@ -96,6 +195,9 @@ namespace PerforceStreamManager.Services
                 }
 
                 _loggingService.LogInfo("Successfully connected to Perforce.");
+
+                // Initialize session timeout timer
+                InitializeSessionTimer();
             }
             catch (P4Exception ex)
             {
@@ -185,6 +287,9 @@ namespace PerforceStreamManager.Services
                 }
 
                 _loggingService.LogInfo("Successfully connected to Perforce.");
+
+                // Initialize session timeout timer
+                InitializeSessionTimer();
             }
             catch (P4Exception ex)
             {
@@ -209,6 +314,9 @@ namespace PerforceStreamManager.Services
         {
             try
             {
+                // Stop session timer first
+                StopSessionTimer();
+
                 if (_connection != null)
                 {
                     if (_connection.Status == ConnectionStatus.Connected)
@@ -227,6 +335,7 @@ namespace PerforceStreamManager.Services
             {
                 _loggingService.LogError(ex, "Disconnect");
                 // Suppress exceptions during disconnect
+                StopSessionTimer();
                 _connection = null;
                 _repository = null;
                 _server = null;
@@ -236,7 +345,8 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
-        /// Ensures the service is connected, throwing an exception if not
+        /// Ensures the service is connected, throwing an exception if not.
+        /// Also resets the activity timer to prevent session timeout.
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
         private void EnsureConnected()
@@ -247,6 +357,9 @@ namespace PerforceStreamManager.Services
                 _loggingService.LogError(ex, "EnsureConnected");
                 throw ex;
             }
+
+            // Reset activity timer on successful operation
+            UpdateActivityTime();
         }
 
         /// <summary>
@@ -283,6 +396,8 @@ namespace PerforceStreamManager.Services
         {
             if (!IsConnected || string.IsNullOrWhiteSpace(streamPath))
                 return null;
+
+            UpdateActivityTime();
 
             try
             {
@@ -814,34 +929,27 @@ namespace PerforceStreamManager.Services
 
             try
             {
-                // Use 'print -o' to output file content to a temp file
+                // Use 'print -o' to output file content to a secure temp file
                 // This is the most reliable method with P4API.NET as the API doesn't
                 // populate TextOutput/BinaryOutput for the print command
-                string tempFile = System.IO.Path.GetTempFileName();
-                try
+                using (var tempFileManager = new SecureTempFileManager())
                 {
-                    var cmd = new P4Command(_repository!, "print", false, "-q", "-o", tempFile, depotPath);
+                    var cmd = new P4Command(_repository!, "print", false, "-q", "-o", tempFileManager.FilePath, depotPath);
                     var result = cmd.Run();
-                    
+
                     if (result.ErrorList != null && result.ErrorList.Count > 0)
                     {
                         throw new P4Exception(result.ErrorList[0]);
                     }
-                    
-                    if (System.IO.File.Exists(tempFile))
+
+                    if (System.IO.File.Exists(tempFileManager.FilePath))
                     {
-                        return System.IO.File.ReadAllText(tempFile);
+                        return System.IO.File.ReadAllText(tempFileManager.FilePath);
                     }
-                    
+
                     return string.Empty;
                 }
-                finally
-                {
-                    if (System.IO.File.Exists(tempFile))
-                    {
-                        System.IO.File.Delete(tempFile);
-                    }
-                }
+                // SecureTempFileManager automatically cleans up the file on dispose
             }
             catch (P4Exception ex)
             {
@@ -1388,12 +1496,11 @@ namespace PerforceStreamManager.Services
             {
                 _loggingService.LogInfo($"Reading depot file: {depotPath}#{revision}");
 
-                // Use 'p4 print -q' to output file content to a temp file
-                string tempFile = System.IO.Path.GetTempFileName();
-                try
+                // Use 'p4 print -q' to output file content to a secure temp file
+                using (var tempFileManager = new SecureTempFileManager())
                 {
                     string fileSpec = $"{depotPath}#{revision}";
-                    var cmd = new P4Command(_repository!, "print", false, "-q", "-o", tempFile, fileSpec);
+                    var cmd = new P4Command(_repository!, "print", false, "-q", "-o", tempFileManager.FilePath, fileSpec);
                     var result = cmd.Run();
 
                     if (result.ErrorList != null && result.ErrorList.Count > 0)
@@ -1401,20 +1508,14 @@ namespace PerforceStreamManager.Services
                         throw new P4Exception(result.ErrorList[0]);
                     }
 
-                    if (System.IO.File.Exists(tempFile))
+                    if (System.IO.File.Exists(tempFileManager.FilePath))
                     {
-                        return System.IO.File.ReadAllText(tempFile);
+                        return System.IO.File.ReadAllText(tempFileManager.FilePath);
                     }
 
                     return string.Empty;
                 }
-                finally
-                {
-                    if (System.IO.File.Exists(tempFile))
-                    {
-                        System.IO.File.Delete(tempFile);
-                    }
-                }
+                // SecureTempFileManager automatically cleans up the file on dispose
             }
             catch (P4Exception ex)
             {
@@ -1428,6 +1529,7 @@ namespace PerforceStreamManager.Services
         /// </summary>
         public void Dispose()
         {
+            StopSessionTimer();
             Disconnect();
         }
     }

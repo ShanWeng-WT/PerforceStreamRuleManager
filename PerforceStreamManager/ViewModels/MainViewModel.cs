@@ -20,7 +20,8 @@ namespace PerforceStreamManager.ViewModels
         private readonly P4Service _p4Service;
         private readonly SnapshotService _snapshotService;
         private readonly SettingsService _settingsService;
-        
+        private readonly ErrorMessageSanitizer _errorSanitizer;
+
         private StreamNode? _selectedStream;
         private RuleViewModel? _selectedRule;
         private RuleViewMode _currentViewMode;
@@ -214,6 +215,7 @@ namespace PerforceStreamManager.ViewModels
             _p4Service = p4Service ?? throw new ArgumentNullException(nameof(p4Service));
             _snapshotService = snapshotService ?? throw new ArgumentNullException(nameof(snapshotService));
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            _errorSanitizer = new ErrorMessageSanitizer(p4Service.Logger);
 
             StreamHierarchy = new ObservableCollection<StreamNode>();
             DisplayedRemapRules = new ObservableCollection<RuleViewModel>();
@@ -238,7 +240,8 @@ namespace PerforceStreamManager.ViewModels
             _p4Service = new P4Service(loggingService);
             _settingsService = new SettingsService(loggingService);
             _snapshotService = new SnapshotService(_p4Service, loggingService);
-            
+            _errorSanitizer = new ErrorMessageSanitizer(loggingService);
+
             StreamHierarchy = new ObservableCollection<StreamNode>();
             DisplayedRemapRules = new ObservableCollection<RuleViewModel>();
             DisplayedIgnoreRules = new ObservableCollection<RuleViewModel>();
@@ -521,7 +524,8 @@ namespace PerforceStreamManager.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"An error occurred while editing the rule: {ex.Message}", "Error", 
+                string safeMessage = _errorSanitizer.SanitizeForUser(ex, "EditRule");
+                System.Windows.MessageBox.Show(safeMessage, "Error",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
@@ -710,7 +714,8 @@ namespace PerforceStreamManager.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Error opening settings: {ex.Message}", "Error", 
+                string safeMessage = _errorSanitizer.SanitizeForUser(ex, "OpenSettings");
+                System.Windows.MessageBox.Show(safeMessage, "Error",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
@@ -741,7 +746,8 @@ namespace PerforceStreamManager.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Error opening log file: {ex.Message}", "Error", 
+                string safeMessage = _errorSanitizer.SanitizeForUser(ex, "OpenLogFile");
+                System.Windows.MessageBox.Show(safeMessage, "Error",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
@@ -908,7 +914,8 @@ namespace PerforceStreamManager.ViewModels
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Error: {ex.Message}\n\nStack Trace:\n{ex.StackTrace}", "Error", 
+                string safeMessage = _errorSanitizer.SanitizeForUser(ex, "RunWithProgressAsync");
+                System.Windows.MessageBox.Show(safeMessage, "Error",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
             finally
