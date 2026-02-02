@@ -43,11 +43,6 @@ namespace PerforceStreamManager.Services
             _settingsFilePath = Path.Combine(appFolder, "settings.json");
         }
 
-        // Keep default constructor for now but it's deprecated
-        public SettingsService() : this(new LoggingService())
-        {
-        }
-
         /// <summary>
         /// Loads application settings from disk.
         /// Passwords are automatically decrypted. Legacy plaintext passwords are migrated on next save.
@@ -135,48 +130,16 @@ namespace PerforceStreamManager.Services
         /// <param name="settings">Settings to save</param>
         public void SaveSettings(AppSettings settings)
         {
-            try
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+
+            string? encryptedPassword = null;
+            if (!string.IsNullOrEmpty(settings.Connection?.Password))
             {
-                if (settings == null)
-                {
-                    throw new ArgumentNullException(nameof(settings));
-                }
-
-                _loggingService.LogInfo("Saving settings.");
-
-                // Create a copy for serialization to avoid modifying the original
-                var settingsToSave = new AppSettings
-                {
-                    Connection = new P4ConnectionSettings
-                    {
-                        Server = settings.Connection?.Server ?? "",
-                        Port = settings.Connection?.Port ?? "",
-                        User = settings.Connection?.User ?? "",
-                        Password = settings.Connection?.Password
-                    },
-                    HistoryStoragePath = settings.HistoryStoragePath,
-                    LastUsedStream = settings.LastUsedStream
-                };
-
-                // Encrypt password before saving
-                if (!string.IsNullOrEmpty(settingsToSave.Connection.Password))
-                {
-                    settingsToSave.Connection.Password = SecureCredentialManager.EncryptPassword(settingsToSave.Connection.Password);
-                }
-
-                // Serialize settings to JSON
-                string json = JsonSerializer.Serialize(settingsToSave, _jsonOptions);
-
-                // Write to file
-                File.WriteAllText(_settingsFilePath, json);
-
-                _needsPasswordMigration = false;
+                encryptedPassword = SecureCredentialManager.EncryptPassword(settings.Connection.Password);
             }
-            catch (Exception ex)
-            {
-                _loggingService.LogError(ex, "SaveSettings");
-                throw;
-            }
+
+            SaveSettingsInternal(settings, encryptedPassword);
         }
 
         /// <summary>
@@ -187,16 +150,27 @@ namespace PerforceStreamManager.Services
         /// <param name="securePassword">Secure password to save</param>
         public void SaveSettings(AppSettings settings, SecureString securePassword)
         {
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+
+            string? encryptedPassword = null;
+            if (securePassword != null && securePassword.Length > 0)
+            {
+                encryptedPassword = SecureCredentialManager.EncryptPassword(securePassword);
+            }
+
+            SaveSettingsInternal(settings, encryptedPassword);
+        }
+
+        /// <summary>
+        /// Internal method that performs the actual save with an already-encrypted password
+        /// </summary>
+        private void SaveSettingsInternal(AppSettings settings, string? encryptedPassword)
+        {
             try
             {
-                if (settings == null)
-                {
-                    throw new ArgumentNullException(nameof(settings));
-                }
+                _loggingService.LogInfo("Saving settings.");
 
-                _loggingService.LogInfo("Saving settings with secure password.");
-
-                // Create a copy for serialization
                 var settingsToSave = new AppSettings
                 {
                     Connection = new P4ConnectionSettings
@@ -204,24 +178,14 @@ namespace PerforceStreamManager.Services
                         Server = settings.Connection?.Server ?? "",
                         Port = settings.Connection?.Port ?? "",
                         User = settings.Connection?.User ?? "",
-                        Password = null
+                        Password = encryptedPassword
                     },
                     HistoryStoragePath = settings.HistoryStoragePath,
                     LastUsedStream = settings.LastUsedStream
                 };
 
-                // Encrypt SecureString password directly
-                if (securePassword != null && securePassword.Length > 0)
-                {
-                    settingsToSave.Connection.Password = SecureCredentialManager.EncryptPassword(securePassword);
-                }
-
-                // Serialize settings to JSON
                 string json = JsonSerializer.Serialize(settingsToSave, _jsonOptions);
-
-                // Write to file
                 File.WriteAllText(_settingsFilePath, json);
-
                 _needsPasswordMigration = false;
             }
             catch (Exception ex)

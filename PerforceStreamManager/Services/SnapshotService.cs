@@ -21,11 +21,6 @@ namespace PerforceStreamManager.Services
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
         }
 
-        // Keep default constructor for now but it's deprecated
-        public SnapshotService(P4Service p4Service) : this(p4Service, new LoggingService())
-        {
-        }
-
         /// <summary>
         /// Creates a snapshot of the current stream rules (single stream - legacy method)
         /// </summary>

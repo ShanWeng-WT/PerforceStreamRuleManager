@@ -15,9 +15,9 @@ namespace PerforceStreamManager.Tests
         [SetUp]
         public void Setup()
         {
-            _settingsService = new SettingsService();
-            
-            // Get the settings file path for cleanup
+            var loggingService = new LoggingService();
+            _settingsService = new SettingsService(loggingService);
+
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string appFolder = Path.Combine(appDataPath, "PerforceStreamManager");
             _testSettingsPath = Path.Combine(appFolder, "settings.json");

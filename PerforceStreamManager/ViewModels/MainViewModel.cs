@@ -22,6 +22,16 @@ namespace PerforceStreamManager.ViewModels
         private readonly SettingsService _settingsService;
         private readonly ErrorMessageSanitizer _errorSanitizer;
 
+        /// <summary>
+        /// Gets the P4Service instance for external access (e.g., dialogs)
+        /// </summary>
+        public P4Service P4Service => _p4Service;
+
+        /// <summary>
+        /// Gets the SettingsService instance for external access (e.g., dialogs)
+        /// </summary>
+        public SettingsService SettingsService => _settingsService;
+
         private StreamNode? _selectedStream;
         private RuleViewModel? _selectedRule;
         private RuleViewMode _currentViewMode;
@@ -210,12 +220,21 @@ namespace PerforceStreamManager.ViewModels
         /// </summary>
         public ICommand RestoreCommand { get; }
 
-        public MainViewModel(P4Service p4Service, SnapshotService snapshotService, SettingsService settingsService)
+        public MainViewModel() : this(CreateDefaultServices())
         {
-            _p4Service = p4Service ?? throw new ArgumentNullException(nameof(p4Service));
-            _snapshotService = snapshotService ?? throw new ArgumentNullException(nameof(snapshotService));
-            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
-            _errorSanitizer = new ErrorMessageSanitizer(p4Service.Logger);
+        }
+
+        public MainViewModel(P4Service p4Service, SnapshotService snapshotService, SettingsService settingsService)
+            : this((p4Service, snapshotService, settingsService))
+        {
+        }
+
+        private MainViewModel((P4Service p4Service, SnapshotService snapshotService, SettingsService settingsService) services)
+        {
+            _p4Service = services.p4Service ?? throw new ArgumentNullException(nameof(services.p4Service));
+            _snapshotService = services.snapshotService ?? throw new ArgumentNullException(nameof(services.snapshotService));
+            _settingsService = services.settingsService ?? throw new ArgumentNullException(nameof(services.settingsService));
+            _errorSanitizer = new ErrorMessageSanitizer(_p4Service.Logger);
 
             StreamHierarchy = new ObservableCollection<StreamNode>();
             DisplayedRemapRules = new ObservableCollection<RuleViewModel>();
@@ -234,29 +253,13 @@ namespace PerforceStreamManager.ViewModels
             InitializeConnection();
         }
 
-        public MainViewModel()
+        private static (P4Service, SnapshotService, SettingsService) CreateDefaultServices()
         {
             var loggingService = new LoggingService();
-            _p4Service = new P4Service(loggingService);
-            _settingsService = new SettingsService(loggingService);
-            _snapshotService = new SnapshotService(_p4Service, loggingService);
-            _errorSanitizer = new ErrorMessageSanitizer(loggingService);
-
-            StreamHierarchy = new ObservableCollection<StreamNode>();
-            DisplayedRemapRules = new ObservableCollection<RuleViewModel>();
-            DisplayedIgnoreRules = new ObservableCollection<RuleViewModel>();
-            _currentViewMode = RuleViewMode.All;
-
-            LoadStreamCommand = new RelayCommand(LoadStreamHierarchy, CanLoadStream);
-            AddRuleCommand = new RelayCommand(AddRule, CanAddRule);
-            EditRuleCommand = new RelayCommand(EditRule, CanEditRule);
-            DeleteRuleCommand = new RelayCommand(DeleteRule, CanDeleteRule);
-            SaveCommand = new RelayCommand(Save, CanSave);
-            OpenSettingsCommand = new RelayCommand(OpenSettings);
-            OpenLogFileCommand = new RelayCommand(OpenLogFile);
-            RestoreCommand = new RelayCommand(RestoreFromHistory, CanRestore);
-
-            InitializeConnection();
+            var p4Service = new P4Service(loggingService);
+            var settingsService = new SettingsService(loggingService);
+            var snapshotService = new SnapshotService(p4Service, loggingService);
+            return (p4Service, snapshotService, settingsService);
         }
 
         private void InitializeConnection()
