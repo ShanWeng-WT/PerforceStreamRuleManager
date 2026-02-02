@@ -275,16 +275,13 @@ namespace PerforceStreamManager.ViewModels
                 }
 
                 // Basic validation before attempting connection
-                if (settings?.Connection != null && 
+                if (settings?.Connection != null &&
                     !string.IsNullOrWhiteSpace(settings.Connection.Server) &&
                     !string.IsNullOrWhiteSpace(settings.Connection.User))
                 {
                     ConnectionStatus = $"Connecting to {settings.Connection.Server}...";
                     _p4Service.Connect(settings.Connection);
                     ConnectionStatus = $"Connected to {settings.Connection.Server} ({settings.Connection.User})";
-                    
-                    // Force command manager to re-evaluate CanExecute after successful connection
-                    CommandManager.InvalidateRequerySuggested();
                 }
                 else
                 {
@@ -295,6 +292,12 @@ namespace PerforceStreamManager.ViewModels
             {
                 ConnectionStatus = "Connection Failed";
                 Console.WriteLine($"Failed to connect: {ex.Message}");
+            }
+            finally
+            {
+                // Always force command manager to re-evaluate CanExecute after connection attempt
+                // This ensures the Load button state updates correctly regardless of success/failure
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
