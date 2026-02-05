@@ -70,10 +70,10 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert
-            Assert.AreEqual(1, _viewModel.DisplayedRemapRules.Count, "Should have 1 remap rule");
-            Assert.AreEqual(1, _viewModel.DisplayedIgnoreRules.Count, "Should have 1 ignore rule");
-            Assert.AreEqual("remap", _viewModel.DisplayedRemapRules[0].RuleType);
-            Assert.AreEqual("ignore", _viewModel.DisplayedIgnoreRules[0].RuleType);
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(1), "Should have 1 remap rule");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(1), "Should have 1 ignore rule");
+            Assert.That(_viewModel.DisplayedRemapRules[0].RuleType, Is.EqualTo("remap"));
+            Assert.That(_viewModel.DisplayedIgnoreRules[0].RuleType, Is.EqualTo("ignore"));
         }
 
         [Test]
@@ -110,9 +110,9 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert
-            Assert.AreEqual(2, _viewModel.DisplayedRemapRules.Count, "Should have 2 remap rules");
-            Assert.AreEqual(0, _viewModel.DisplayedIgnoreRules.Count, "Should have 0 ignore rules");
-            Assert.IsTrue(_viewModel.DisplayedRemapRules.All(r => r.RuleType.Equals("remap", System.StringComparison.OrdinalIgnoreCase)));
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(2), "Should have 2 remap rules");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(0), "Should have 0 ignore rules");
+            Assert.That(_viewModel.DisplayedRemapRules.All(r => r.RuleType.Equals("remap", System.StringComparison.OrdinalIgnoreCase)), Is.True);
         }
 
         [Test]
@@ -149,9 +149,9 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert
-            Assert.AreEqual(0, _viewModel.DisplayedRemapRules.Count, "Should have 0 remap rules");
-            Assert.AreEqual(2, _viewModel.DisplayedIgnoreRules.Count, "Should have 2 ignore rules");
-            Assert.IsTrue(_viewModel.DisplayedIgnoreRules.All(r => r.RuleType.Equals("ignore", System.StringComparison.OrdinalIgnoreCase)));
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(0), "Should have 0 remap rules");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(2), "Should have 2 ignore rules");
+            Assert.That(_viewModel.DisplayedIgnoreRules.All(r => r.RuleType.Equals("ignore", System.StringComparison.OrdinalIgnoreCase)), Is.True);
         }
 
         [Test]
@@ -181,8 +181,8 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = streamWithOnlyRemap;
 
             // Assert
-            Assert.AreEqual(1, _viewModel.DisplayedRemapRules.Count, "Should have 1 remap rule");
-            Assert.AreEqual(0, _viewModel.DisplayedIgnoreRules.Count, "Ignore collection should be empty");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(1), "Should have 1 remap rule");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(0), "Ignore collection should be empty");
 
             // Arrange - stream with only ignore rules
             var streamWithOnlyIgnore = new StreamNode
@@ -206,8 +206,8 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = streamWithOnlyIgnore;
 
             // Assert
-            Assert.AreEqual(0, _viewModel.DisplayedRemapRules.Count, "Remap collection should be empty");
-            Assert.AreEqual(1, _viewModel.DisplayedIgnoreRules.Count, "Should have 1 ignore rule");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(0), "Remap collection should be empty");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(1), "Should have 1 ignore rule");
         }
 
         [Test]
@@ -258,8 +258,8 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert
-            Assert.AreEqual(2, _viewModel.DisplayedRemapRules.Count, "Should have 2 remap rules (case-insensitive)");
-            Assert.AreEqual(2, _viewModel.DisplayedIgnoreRules.Count, "Should have 2 ignore rules (case-insensitive)");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(2), "Should have 2 remap rules (case-insensitive)");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(2), "Should have 2 ignore rules (case-insensitive)");
         }
 
         [Test]
@@ -306,8 +306,8 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert - Only local rules should be displayed
-            Assert.AreEqual(1, _viewModel.DisplayedRemapRules.Count, "Should have 1 local remap rule");
-            Assert.AreEqual(0, _viewModel.DisplayedIgnoreRules.Count, "Should have 0 local ignore rules");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(1), "Should have 1 local remap rule");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(0), "Should have 0 local ignore rules");
         }
 
         [Test]
@@ -354,8 +354,8 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert - Only inherited rules should be displayed
-            Assert.AreEqual(0, _viewModel.DisplayedRemapRules.Count, "Should have 0 inherited remap rules");
-            Assert.AreEqual(1, _viewModel.DisplayedIgnoreRules.Count, "Should have 1 inherited ignore rule");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(0), "Should have 0 inherited remap rules");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(1), "Should have 1 inherited ignore rule");
         }
 
         [Test]
@@ -409,8 +409,8 @@ namespace PerforceStreamManager.Tests
             _viewModel.SelectedStream = mockStream;
 
             // Assert - All rules (local + inherited) should be displayed
-            Assert.AreEqual(2, _viewModel.DisplayedRemapRules.Count, "Should have 2 total remap rules (1 local + 1 inherited)");
-            Assert.AreEqual(1, _viewModel.DisplayedIgnoreRules.Count, "Should have 1 total ignore rule (inherited)");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(2), "Should have 2 total remap rules (1 local + 1 inherited)");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(1), "Should have 1 total ignore rule (inherited)");
         }
 
         [Test]
@@ -435,14 +435,14 @@ namespace PerforceStreamManager.Tests
             };
             
             _viewModel.SelectedStream = mockStream;
-            Assert.AreEqual(1, _viewModel.DisplayedRemapRules.Count, "Should have 1 remap rule initially");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(1), "Should have 1 remap rule initially");
 
             // Act - Set stream to null
             _viewModel.SelectedStream = null;
 
             // Assert - Collections should be cleared
-            Assert.AreEqual(0, _viewModel.DisplayedRemapRules.Count, "Remap collection should be empty");
-            Assert.AreEqual(0, _viewModel.DisplayedIgnoreRules.Count, "Ignore collection should be empty");
+            Assert.That(_viewModel.DisplayedRemapRules.Count, Is.EqualTo(0), "Remap collection should be empty");
+            Assert.That(_viewModel.DisplayedIgnoreRules.Count, Is.EqualTo(0), "Ignore collection should be empty");
         }
     }
 }

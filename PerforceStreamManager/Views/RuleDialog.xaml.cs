@@ -29,15 +29,15 @@ public partial class RuleDialog : Window
             RuleType = selectedItem.Content.ToString() ?? "ignore";
         }
         
-        if (existingRule != null)
+        if (existingRule is not null)
         {
             // Edit mode - populate with existing rule
-            if (existingRule.Type != null)
+            if (!string.IsNullOrEmpty(existingRule.Type))
             {
                 var itemToSelect = RuleTypeComboBox.Items
                     .Cast<ComboBoxItem>()
                     .FirstOrDefault(item => string.Equals(item.Content?.ToString(), existingRule.Type, StringComparison.OrdinalIgnoreCase));
-                
+
                 if (itemToSelect != null)
                 {
                     RuleTypeComboBox.SelectedItem = itemToSelect;
@@ -93,8 +93,8 @@ public partial class RuleDialog : Window
         
         if (RuleTypeComboBox.SelectedItem is ComboBoxItem selectedItem)
         {
-            RuleType = selectedItem.Content.ToString();
-            
+            RuleType = selectedItem.Content?.ToString() ?? "ignore";
+
             if (RuleType == "remap" && string.IsNullOrWhiteSpace(RemapTargetTextBox.Text))
             {
                 MessageBox.Show("Remap target is required for remap rules.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);

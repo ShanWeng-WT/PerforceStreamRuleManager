@@ -10,7 +10,7 @@ public partial class SettingsDialog : Window
     private readonly SettingsService _settingsService;
     private readonly P4Service _p4Service;
     private readonly ErrorMessageSanitizer _errorSanitizer;
-    private AppSettings _settings;
+    private AppSettings _settings = null!;
 
     public SettingsDialog(SettingsService settingsService, P4Service p4Service)
     {

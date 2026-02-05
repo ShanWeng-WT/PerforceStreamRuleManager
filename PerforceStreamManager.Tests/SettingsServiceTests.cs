@@ -107,7 +107,7 @@ namespace PerforceStreamManager.Tests
         public void SaveSettings_WithNullSettings_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => _settingsService.SaveSettings(null));
+            Assert.Throws<ArgumentNullException>(() => _settingsService.SaveSettings(null!));
         }
     }
 }

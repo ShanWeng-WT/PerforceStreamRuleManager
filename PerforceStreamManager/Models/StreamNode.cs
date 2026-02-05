@@ -11,17 +11,17 @@ namespace PerforceStreamManager.Models
         /// <summary>
         /// Display name of the stream
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         /// <summary>
         /// Full depot path of the stream
         /// </summary>
-        public string Path { get; set; }
+        public string Path { get; set; } = string.Empty;
 
         /// <summary>
         /// Parent stream node (null for root streams)
         /// </summary>
-        public StreamNode Parent { get; set; }
+        public StreamNode? Parent { get; set; }
 
         /// <summary>
         /// Child stream nodes

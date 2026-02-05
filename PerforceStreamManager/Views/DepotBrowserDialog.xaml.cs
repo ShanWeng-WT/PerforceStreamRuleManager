@@ -10,12 +10,12 @@ public partial class DepotBrowserDialog : Window
 {
     private readonly P4Service _p4Service;
     private readonly ErrorMessageSanitizer _errorSanitizer;
-    private readonly string _rootPath;
-    private readonly string _targetStream;
+    private readonly string? _rootPath;
+    private readonly string? _targetStream;
 
-    public string SelectedPath { get; private set; }
+    public string SelectedPath { get; private set; } = string.Empty;
 
-    public DepotBrowserDialog(P4Service p4Service, string rootPath = null, string targetStream = null)
+    public DepotBrowserDialog(P4Service p4Service, string? rootPath = null, string? targetStream = null)
     {
         InitializeComponent();
         _p4Service = p4Service;
@@ -112,7 +112,7 @@ public partial class DepotBrowserDialog : Window
     {
         if (e.NewValue is DepotNode selectedNode)
         {
-            SelectedPath = selectedNode.Path.Contains(_targetStream) ? selectedNode.Path.Substring(_targetStream.Length + 1) : selectedNode.Path;
+            SelectedPath = !string.IsNullOrEmpty(_targetStream) && selectedNode.Path.Contains(_targetStream) ? selectedNode.Path.Substring(_targetStream.Length + 1) : selectedNode.Path;
             SelectedPathTextBox.Text = SelectedPath;
             
             // Lazy load children if needed (in case selected without expanding first)
@@ -334,8 +334,8 @@ public partial class DepotBrowserDialog : Window
 // Helper class for depot tree nodes
 public class DepotNode
 {
-    public string Name { get; set; }
-    public string Path { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
     public bool IsDirectory { get; set; }
     public ObservableCollection<DepotNode> Children { get; set; } = new ObservableCollection<DepotNode>();
 }

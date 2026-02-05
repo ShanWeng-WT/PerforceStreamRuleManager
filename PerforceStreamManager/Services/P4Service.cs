@@ -570,10 +570,10 @@ namespace PerforceStreamManager.Services
                         {
                             // Ignored entries are just paths
                             rules.Add(new StreamRule(
-                                "ignore", 
-                                entry.Left.Path, 
-                                null, 
-                                streamPath));
+                                "ignore",
+                                entry.Left.Path,
+                                remapTarget: null,
+                                sourceStream: streamPath));
                         }
                     }
                 }
@@ -1128,7 +1128,7 @@ namespace PerforceStreamManager.Services
                             // Sync the file first to ensure we are editing the latest revision
                             // This prevents "must resolve" errors if we are out of date
                             _loggingService.LogInfo("Syncing file before edit...");
-                            _connection!.Client.SyncFiles(new List<FileSpec> { fileSpec }, null);
+                            _connection!.Client!.SyncFiles(new List<FileSpec> { fileSpec }, null);
 
                             var editOptions = new EditCmdOptions(EditFilesCmdFlags.None, changelist.Id, null);
                             var editedFiles = _connection.Client.EditFiles(new List<FileSpec> { fileSpec }, editOptions);
@@ -1165,7 +1165,7 @@ namespace PerforceStreamManager.Services
                     // Try Add
                     _loggingService.LogInfo("Opening file for add...");
                     var addOptions = new AddFilesCmdOptions(AddFilesCmdFlags.None, changelist.Id, null);
-                    var addedFiles = _connection!.Client.AddFiles(new List<FileSpec> { fileSpec }, addOptions);
+                    var addedFiles = _connection!.Client!.AddFiles(new List<FileSpec> { fileSpec }, addOptions);
                     if (addedFiles == null || addedFiles.Count == 0)
                     {
                         // Provide detailed diagnostic information
@@ -1235,7 +1235,7 @@ namespace PerforceStreamManager.Services
                     
                     // Submit
                     var submitOptions = new SubmitCmdOptions(SubmitFilesCmdFlags.None, changelist.Id, null, null, null);
-                    var submitResults = _connection!.Client.SubmitFiles(submitOptions, null);
+                    var submitResults = _connection!.Client!.SubmitFiles(submitOptions, null);
                     
                     if (submitResults != null && submitResults.Files != null)
                     {

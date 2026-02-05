@@ -10,28 +10,28 @@ namespace PerforceStreamManager.Models
         /// <summary>
         /// Type of rule: "ignore" or "remap"
         /// </summary>
-        public string Type { get; set; }
+        public string Type { get; set; } = string.Empty;
 
         /// <summary>
         /// The depot path pattern for this rule
         /// </summary>
-        public string Path { get; set; }
+        public string Path { get; set; } = string.Empty;
 
         /// <summary>
         /// Target path for remap rules (null for ignore rules)
         /// </summary>
-        public string RemapTarget { get; set; }
+        public string? RemapTarget { get; set; }
 
         /// <summary>
         /// The stream path that defined this rule
         /// </summary>
-        public string SourceStream { get; set; }
+        public string? SourceStream { get; set; }
 
         public StreamRule()
         {
         }
 
-        public StreamRule(string type, string path, string remapTarget = null, string sourceStream = null)
+        public StreamRule(string type, string path, string? remapTarget = null, string? sourceStream = null)
         {
             Type = type;
             Path = path;
@@ -40,9 +40,9 @@ namespace PerforceStreamManager.Models
         }
 
         // Equality comparison implementation
-        public bool Equals(StreamRule other)
+        public bool Equals(StreamRule? other)
         {
-            if (other == null)
+            if (other is null)
                 return false;
 
             return Type == other.Type &&
@@ -51,7 +51,7 @@ namespace PerforceStreamManager.Models
                    SourceStream == other.SourceStream;
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             return Equals(obj as StreamRule);
         }
@@ -69,7 +69,7 @@ namespace PerforceStreamManager.Models
             }
         }
 
-        public static bool operator ==(StreamRule left, StreamRule right)
+        public static bool operator ==(StreamRule? left, StreamRule? right)
         {
             if (ReferenceEquals(left, right))
                 return true;
@@ -78,7 +78,7 @@ namespace PerforceStreamManager.Models
             return left.Equals(right);
         }
 
-        public static bool operator !=(StreamRule left, StreamRule right)
+        public static bool operator !=(StreamRule? left, StreamRule? right)
         {
             return !(left == right);
         }
