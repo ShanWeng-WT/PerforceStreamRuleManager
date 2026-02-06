@@ -449,6 +449,7 @@ namespace PerforceStreamManager.Services
                 Name = stream.Name ?? stream.Id,
                 Path = stream.Id,
                 Parent = parent!,
+                ParentPath = stream.Parent?.ToString() ?? string.Empty,
                 Children = new List<StreamNode>(),
                 LocalRules = GetStreamRules(stream.Id)
             };
@@ -504,6 +505,77 @@ namespace PerforceStreamManager.Services
             {
                 _loggingService.LogError(ex, "GetAllStreams");
                 return new List<Stream>();
+            }
+        }
+
+        /// <summary>
+        /// Gets all stream paths from the Perforce server
+        /// </summary>
+        /// <returns>List of stream paths sorted alphabetically</returns>
+        public List<string> GetAllStreamPaths()
+        {
+            EnsureConnected();
+
+            try
+            {
+                var streams = GetAllStreams();
+                return streams
+                    .Select(s => s.Id)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError(ex, "GetAllStreamPaths");
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// Updates the parent stream of a stream
+        /// </summary>
+        /// <param name="streamPath">Full depot path of the stream to update</param>
+        /// <param name="newParentPath">Full depot path of the new parent stream (null or empty for mainline)</param>
+        /// <exception cref="InvalidOperationException">Thrown when not connected</exception>
+        /// <exception cref="ArgumentException">Thrown when stream path is invalid</exception>
+        /// <exception cref="Exception">Thrown when update fails</exception>
+        public void UpdateStreamParent(string streamPath, string? newParentPath)
+        {
+            EnsureConnected();
+
+            // Validate stream path for security
+            P4InputValidator.ValidateStreamPathOrThrow(streamPath, nameof(streamPath));
+
+            // Validate new parent path if provided
+            if (!string.IsNullOrEmpty(newParentPath))
+            {
+                P4InputValidator.ValidateStreamPathOrThrow(newParentPath, nameof(newParentPath));
+            }
+
+            try
+            {
+                _loggingService.LogInfo($"Updating parent for stream: {streamPath} to {newParentPath ?? "(none)"}");
+                var stream = GetStream(streamPath);
+
+                // Set the new parent
+                if (string.IsNullOrEmpty(newParentPath))
+                {
+                    stream.Parent = null;
+                }
+                else
+                {
+                    stream.Parent = new DepotPath(newParentPath);
+                }
+
+                // Save the stream
+                _repository!.UpdateStream(stream);
+                _loggingService.LogInfo($"Successfully updated parent for stream: {streamPath}");
+            }
+            catch (P4Exception ex)
+            {
+                _loggingService.LogError(ex, $"UpdateStreamParent({streamPath}, {newParentPath})");
+                throw new Exception($"Failed to update parent for stream '{streamPath}': {ex.Message}", ex);
             }
         }
 

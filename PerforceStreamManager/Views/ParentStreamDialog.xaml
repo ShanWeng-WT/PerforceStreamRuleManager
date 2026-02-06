@@ -1,0 +1,81 @@
+<Window x:Class="PerforceStreamManager.Views.ParentStreamDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Change Parent Stream" Height="300" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Current Stream -->
+        <StackPanel Grid.Row="0" Margin="0,5">
+            <Label Content="Stream:" FontWeight="SemiBold"/>
+            <TextBox Name="StreamPathTextBox"
+                     IsReadOnly="True"
+                     Background="#F0F0F0"
+                     VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Current Parent -->
+        <StackPanel Grid.Row="1" Margin="0,5">
+            <Label Content="Current Parent:" FontWeight="SemiBold"/>
+            <TextBox Name="CurrentParentTextBox"
+                     IsReadOnly="True"
+                     Background="#F0F0F0"
+                     VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <!-- New Parent Selection -->
+        <StackPanel Grid.Row="2" Margin="0,5">
+            <Label Content="New Parent:" FontWeight="SemiBold"/>
+            <ComboBox Name="ParentComboBox"
+                      IsEditable="True"
+                      VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Warning Message -->
+        <Border Grid.Row="3"
+                Margin="0,10"
+                Padding="10"
+                Background="#FFF3CD"
+                BorderBrush="#FFECB5"
+                BorderThickness="1"
+                CornerRadius="3">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="!"
+                           FontWeight="Bold"
+                           Foreground="#856404"
+                           Margin="0,0,10,0"/>
+                <TextBlock Text="Changing a stream's parent may affect how files are merged and integrated. This operation should be done with care."
+                           TextWrapping="Wrap"
+                           Foreground="#856404"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="OK"
+                    Width="80"
+                    IsDefault="True"
+                    Click="OkButton_Click"/>
+            <Button Content="Cancel"
+                    Width="80"
+                    Margin="10,0,0,0"
+                    IsCancel="True"
+                    Click="CancelButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

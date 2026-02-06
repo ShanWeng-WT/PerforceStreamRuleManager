@@ -23,9 +23,22 @@ namespace PerforceStreamManager.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<StreamRule>? Rules { get; set; }
 
+        /// <summary>
+        /// Parent stream paths organized by stream path. Key is the stream path, value is the parent stream path (null for mainline).
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string?>? StreamParents { get; set; }
+
+        /// <summary>
+        /// Indicates whether this snapshot contains parent stream information
+        /// </summary>
+        [JsonIgnore]
+        public bool HasParentInfo => StreamParents != null && StreamParents.Count > 0;
+
         public Snapshot()
         {
             StreamRules = new Dictionary<string, List<StreamRule>>();
+            StreamParents = new Dictionary<string, string?>();
             Rules = null; // Don't initialize legacy property for new snapshots
         }
 
@@ -35,6 +48,17 @@ namespace PerforceStreamManager.Models
         public Snapshot(Dictionary<string, List<StreamRule>> streamRules)
         {
             StreamRules = streamRules ?? new Dictionary<string, List<StreamRule>>();
+            StreamParents = new Dictionary<string, string?>();
+            Rules = null; // Don't use legacy property for new snapshots
+        }
+
+        /// <summary>
+        /// Creates a snapshot from stream rules and parent information
+        /// </summary>
+        public Snapshot(Dictionary<string, List<StreamRule>> streamRules, Dictionary<string, string?> streamParents)
+        {
+            StreamRules = streamRules ?? new Dictionary<string, List<StreamRule>>();
+            StreamParents = streamParents ?? new Dictionary<string, string?>();
             Rules = null; // Don't use legacy property for new snapshots
         }
 
@@ -45,6 +69,7 @@ namespace PerforceStreamManager.Models
         {
             Rules = rules ?? new List<StreamRule>();
             StreamRules = null; // Don't use new property for legacy snapshots
+            StreamParents = null; // Legacy snapshots don't have parent info
         }
 
         /// <summary>
@@ -95,6 +120,33 @@ namespace PerforceStreamManager.Models
             }
 
             return new List<StreamRule>();
+        }
+
+        /// <summary>
+        /// Gets the parent stream path for a specific stream
+        /// </summary>
+        /// <param name="streamPath">The stream path to look up</param>
+        /// <returns>Parent stream path, or null if not found or mainline</returns>
+        public string? GetParentForStream(string streamPath)
+        {
+            if (StreamParents == null || StreamParents.Count == 0)
+                return null;
+
+            // Try exact match first
+            if (StreamParents.TryGetValue(streamPath, out var parent))
+            {
+                return parent;
+            }
+
+            // Try case-insensitive match
+            var key = StreamParents.Keys.FirstOrDefault(k =>
+                string.Equals(k, streamPath, System.StringComparison.OrdinalIgnoreCase));
+            if (key != null)
+            {
+                return StreamParents[key];
+            }
+
+            return null;
         }
     }
 }

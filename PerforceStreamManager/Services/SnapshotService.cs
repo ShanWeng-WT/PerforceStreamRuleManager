@@ -51,10 +51,10 @@ namespace PerforceStreamManager.Services
 
         /// <summary>
         /// Creates a snapshot of the entire stream hierarchy starting from the root node.
-        /// Captures local rules for all streams in the tree.
+        /// Captures local rules and parent information for all streams in the tree.
         /// </summary>
         /// <param name="rootNode">The root stream node of the hierarchy</param>
-        /// <returns>A new Snapshot object containing rules for all streams</returns>
+        /// <returns>A new Snapshot object containing rules and parent info for all streams</returns>
         /// <exception cref="ArgumentNullException">Thrown when rootNode is null</exception>
         public Snapshot CreateHierarchySnapshot(StreamNode rootNode)
         {
@@ -64,22 +64,27 @@ namespace PerforceStreamManager.Services
             try
             {
                 var streamRules = new Dictionary<string, List<StreamRule>>();
-                
-                // Recursively collect rules from all streams in the hierarchy
-                CollectStreamRules(rootNode, streamRules);
+                var streamParents = new Dictionary<string, string?>();
+
+                // Recursively collect rules and parent info from all streams in the hierarchy
+                CollectStreamData(rootNode, streamRules, streamParents);
 
                 // Log details about what was collected
                 int totalRules = streamRules.Values.Sum(r => r.Count);
                 _loggingService.LogInfo($"CreateHierarchySnapshot: Collected {streamRules.Count} streams with {totalRules} total rules");
                 foreach (var kvp in streamRules)
                 {
-                    _loggingService.LogInfo($"  Stream '{kvp.Key}': {kvp.Value.Count} rules");
+                    string parentInfo = streamParents.TryGetValue(kvp.Key, out var parent)
+                        ? (string.IsNullOrEmpty(parent) ? "(mainline)" : parent)
+                        : "(unknown)";
+                    _loggingService.LogInfo($"  Stream '{kvp.Key}': {kvp.Value.Count} rules, parent: {parentInfo}");
                 }
 
-                var snapshot = new Snapshot(streamRules);
-                
+                var snapshot = new Snapshot(streamRules, streamParents);
+
                 // Verify snapshot was created correctly
                 _loggingService.LogInfo($"CreateHierarchySnapshot: Snapshot.StreamRules is {(snapshot.StreamRules == null ? "null" : $"not null with {snapshot.StreamRules.Count} entries")}");
+                _loggingService.LogInfo($"CreateHierarchySnapshot: Snapshot.StreamParents is {(snapshot.StreamParents == null ? "null" : $"not null with {snapshot.StreamParents.Count} entries")}");
                 _loggingService.LogInfo($"CreateHierarchySnapshot: Snapshot.Rules is {(snapshot.Rules == null ? "null" : $"not null with {snapshot.Rules.Count} entries")}");
 
                 return snapshot;
@@ -92,14 +97,14 @@ namespace PerforceStreamManager.Services
         }
 
         /// <summary>
-        /// Recursively collects local rules from a stream node and all its children
+        /// Recursively collects local rules and parent info from a stream node and all its children
         /// </summary>
-        private void CollectStreamRules(StreamNode node, Dictionary<string, List<StreamRule>> streamRules)
+        private void CollectStreamData(StreamNode node, Dictionary<string, List<StreamRule>> streamRules, Dictionary<string, string?> streamParents)
         {
             // Add this stream's local rules
             if (node.LocalRules != null && node.LocalRules.Count > 0)
             {
-                var rulesWithSource = node.LocalRules.Select(rule => 
+                var rulesWithSource = node.LocalRules.Select(rule =>
                     new StreamRule(rule.Type, rule.Path, rule.RemapTarget, node.Path)
                 ).ToList();
                 streamRules[node.Path] = rulesWithSource;
@@ -110,12 +115,16 @@ namespace PerforceStreamManager.Services
                 streamRules[node.Path] = new List<StreamRule>();
             }
 
+            // Add this stream's parent info
+            // Store null for mainline streams (empty ParentPath), otherwise store the parent path
+            streamParents[node.Path] = string.IsNullOrEmpty(node.ParentPath) ? null : node.ParentPath;
+
             // Recurse into children
             if (node.Children != null)
             {
                 foreach (var child in node.Children)
                 {
-                    CollectStreamRules(child, streamRules);
+                    CollectStreamData(child, streamRules, streamParents);
                 }
             }
         }

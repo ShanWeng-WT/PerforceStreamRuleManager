@@ -42,6 +42,9 @@ namespace PerforceStreamManager.ViewModels
         // Tracks original rules per stream path for change detection
         private readonly Dictionary<string, List<StreamRule>> _originalRulesPerStream = new();
 
+        // Tracks original parents per stream path for change detection
+        private readonly Dictionary<string, string?> _originalParentsPerStream = new();
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         /// <summary>
@@ -113,6 +116,7 @@ namespace PerforceStreamManager.ViewModels
                 {
                     _selectedStream = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(SelectedStreamParentPath));
                     RefreshRuleDisplay();
                 }
             }
@@ -133,6 +137,16 @@ namespace PerforceStreamManager.ViewModels
                 }
             }
         }
+
+        /// <summary>
+        /// Gets the parent path of the currently selected stream
+        /// </summary>
+        public string? SelectedStreamParentPath => SelectedStream?.ParentPath;
+
+        /// <summary>
+        /// Collection of available parent streams for selection
+        /// </summary>
+        public ObservableCollection<string> AvailableParentStreams { get; } = new();
 
         /// <summary>
         /// Collection of remap rules to display based on current view mode
@@ -220,6 +234,11 @@ namespace PerforceStreamManager.ViewModels
         /// </summary>
         public ICommand RestoreCommand { get; }
 
+        /// <summary>
+        /// Command to change the parent stream
+        /// </summary>
+        public ICommand ChangeParentCommand { get; }
+
         public MainViewModel() : this(CreateDefaultServices())
         {
         }
@@ -249,6 +268,7 @@ namespace PerforceStreamManager.ViewModels
             OpenSettingsCommand = new RelayCommand(OpenSettings);
             OpenLogFileCommand = new RelayCommand(OpenLogFile);
             RestoreCommand = new RelayCommand(RestoreFromHistory, CanRestore);
+            ChangeParentCommand = new RelayCommand(ChangeParent, CanChangeParent);
 
             InitializeConnection();
         }
@@ -337,16 +357,17 @@ namespace PerforceStreamManager.ViewModels
                 // Update UI
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // Clear existing hierarchy and original rules tracking
+                    // Clear existing hierarchy and original data tracking
                     StreamHierarchy.Clear();
                     _originalRulesPerStream.Clear();
+                    _originalParentsPerStream.Clear();
                     HasUnsavedChanges = false;
 
-                    // Add to observable collection and store original rules
+                    // Add to observable collection and store original data
                     foreach (var node in hierarchy)
                     {
                         StreamHierarchy.Add(node);
-                        StoreOriginalRulesRecursive(node);
+                        StoreOriginalDataRecursive(node);
                     }
 
                     // Select the first stream if available
@@ -650,7 +671,7 @@ namespace PerforceStreamManager.ViewModels
             {
                 var streamNode = SelectedStream;
                 var rules = streamNode.LocalRules;
-                
+
                 // Capture the root stream on the UI thread before entering background task
                 var rootStream = StreamHierarchy.FirstOrDefault();
                 if (rootStream == null)
@@ -658,10 +679,19 @@ namespace PerforceStreamManager.ViewModels
                     throw new InvalidOperationException("No stream hierarchy loaded");
                 }
 
+                // Capture pending parent changes on the UI thread
+                var parentChanges = GetPendingParentChanges();
+
                 await Task.Run(() =>
                 {
                     // Update stream rules
                     _p4Service.UpdateStreamRules(streamNode.Path, rules);
+
+                    // Update any changed parent streams
+                    foreach (var parentChange in parentChanges)
+                    {
+                        _p4Service.UpdateStreamParent(parentChange.StreamPath, parentChange.NewParent);
+                    }
 
                     // Create snapshot of the ENTIRE hierarchy (not just selected stream)
                     var snapshot = _snapshotService.CreateHierarchySnapshot(rootStream);
@@ -686,8 +716,14 @@ namespace PerforceStreamManager.ViewModels
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
+                    // Update the original parents tracking after successful save
+                    foreach (var parentChange in parentChanges)
+                    {
+                        _originalParentsPerStream[parentChange.StreamPath] = parentChange.NewParent;
+                    }
+
                     HasUnsavedChanges = false;
-                    string message = submitImmediately 
+                    string message = submitImmediately
                         ? $"Stream {streamNode.Path} saved and submitted successfully."
                         : $"Stream {streamNode.Path} saved. Snapshot file left in pending changelist.";
                     System.Windows.MessageBox.Show(message, "Success",
@@ -755,6 +791,104 @@ namespace PerforceStreamManager.ViewModels
                 string safeMessage = _errorSanitizer.SanitizeForUser(ex, "OpenLogFile");
                 System.Windows.MessageBox.Show(safeMessage, "Error",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Changes the parent stream of the selected stream
+        /// </summary>
+        /// <param name="parameter">Optional parameter</param>
+        private void ChangeParent(object? parameter)
+        {
+            if (SelectedStream == null)
+            {
+                System.Windows.MessageBox.Show("No stream selected", "Error",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                var dialog = new Views.ParentStreamDialog(
+                    _p4Service,
+                    SelectedStream.Path,
+                    SelectedStream.ParentPath);
+
+                if (dialog.ShowDialog() == true)
+                {
+                    string? newParent = dialog.SelectedParentPath;
+
+                    // Update the stream node's parent path
+                    SelectedStream.ParentPath = newParent ?? string.Empty;
+
+                    // Mark as unsaved
+                    HasUnsavedChanges = true;
+
+                    // Notify UI of parent path change
+                    OnPropertyChanged(nameof(SelectedStreamParentPath));
+                }
+            }
+            catch (Exception ex)
+            {
+                string safeMessage = _errorSanitizer.SanitizeForUser(ex, "ChangeParent");
+                System.Windows.MessageBox.Show(safeMessage, "Error",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Determines if the parent can be changed
+        /// </summary>
+        private bool CanChangeParent(object? parameter)
+        {
+            return _p4Service.IsConnected && SelectedStream != null;
+        }
+
+        /// <summary>
+        /// Gets all pending parent changes across all streams in the hierarchy
+        /// </summary>
+        /// <returns>List of parent changes</returns>
+        public List<ParentChangeInfo> GetPendingParentChanges()
+        {
+            var changes = new List<ParentChangeInfo>();
+
+            foreach (var node in StreamHierarchy)
+            {
+                CollectParentChangesRecursive(node, changes);
+            }
+
+            return changes;
+        }
+
+        /// <summary>
+        /// Recursively collects parent changes for a stream node and all its children
+        /// </summary>
+        private void CollectParentChangesRecursive(StreamNode node, List<ParentChangeInfo> changes)
+        {
+            if (node == null) return;
+
+            // Get original parent for this stream
+            _originalParentsPerStream.TryGetValue(node.Path, out var originalParent);
+
+            // Normalize empty strings to null for comparison
+            string? currentParent = string.IsNullOrEmpty(node.ParentPath) ? null : node.ParentPath;
+            originalParent = string.IsNullOrEmpty(originalParent) ? null : originalParent;
+
+            // Check if parent has changed
+            if (!string.Equals(originalParent, currentParent, StringComparison.OrdinalIgnoreCase))
+            {
+                changes.Add(new ParentChangeInfo
+                {
+                    StreamPath = node.Path,
+                    OriginalParent = originalParent,
+                    NewParent = currentParent
+                });
+            }
+
+            // Recurse into children
+            foreach (var child in node.Children)
+            {
+                CollectParentChangesRecursive(child, changes);
             }
         }
 
@@ -835,10 +969,11 @@ namespace PerforceStreamManager.ViewModels
                     throw new InvalidOperationException("No stream hierarchy loaded");
                 }
 
-                // Restore rules for all streams in the hierarchy
+                // Restore rules and parent info for all streams in the hierarchy
                 int totalStreamsRestored = 0;
                 int totalRulesRestored = 0;
-                RestoreHierarchyRules(rootStream, snapshot, ref totalStreamsRestored, ref totalRulesRestored);
+                int totalParentsRestored = 0;
+                RestoreHierarchyData(rootStream, snapshot, ref totalStreamsRestored, ref totalRulesRestored, ref totalParentsRestored);
 
                 // Update UI on dispatcher thread
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -848,10 +983,14 @@ namespace PerforceStreamManager.ViewModels
 
                     // Refresh display
                     RefreshRuleDisplay();
+                    OnPropertyChanged(nameof(SelectedStreamParentPath));
 
+                    string parentInfo = totalParentsRestored > 0
+                        ? $" and {totalParentsRestored} parent assignment(s)"
+                        : "";
                     System.Windows.MessageBox.Show(
-                        $"Restored {totalRulesRestored} rule(s) across {totalStreamsRestored} stream(s) from revision #{revision.Revision}.\n\nClick Save to apply these changes to Perforce.", 
-                        "Restore Complete", 
+                        $"Restored {totalRulesRestored} rule(s){parentInfo} across {totalStreamsRestored} stream(s) from revision #{revision.Revision}.\n\nClick Save to apply these changes to Perforce.",
+                        "Restore Complete",
                         System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                 });
             }, "Loading history...");
@@ -866,16 +1005,16 @@ namespace PerforceStreamManager.ViewModels
         }
 
         /// <summary>
-        /// Recursively restores rules for a stream node and all its children from a snapshot
+        /// Recursively restores rules and parent info for a stream node and all its children from a snapshot
         /// </summary>
-        private void RestoreHierarchyRules(StreamNode node, Models.Snapshot snapshot, ref int totalStreamsRestored, ref int totalRulesRestored)
+        private void RestoreHierarchyData(StreamNode node, Models.Snapshot snapshot, ref int totalStreamsRestored, ref int totalRulesRestored, ref int totalParentsRestored)
         {
             // Get rules for this stream from snapshot
             var rules = snapshot.GetRulesForStream(node.Path);
-            
-            // Only update if there are rules in the snapshot for this stream
+
+            // Only update rules if there are rules in the snapshot for this stream
             // (empty list means the stream was captured but had no rules)
-            if (snapshot.StreamRules?.ContainsKey(node.Path) == true || 
+            if (snapshot.StreamRules?.ContainsKey(node.Path) == true ||
                 snapshot.StreamRules?.Keys.Any(k => string.Equals(k, node.Path, StringComparison.OrdinalIgnoreCase)) == true ||
                 rules.Count > 0)
             {
@@ -888,12 +1027,25 @@ namespace PerforceStreamManager.ViewModels
                 totalRulesRestored += rules.Count;
             }
 
+            // Restore parent info if snapshot has it
+            if (snapshot.HasParentInfo)
+            {
+                var parent = snapshot.GetParentForStream(node.Path);
+                // Only update if the snapshot explicitly has info for this stream
+                if (snapshot.StreamParents?.ContainsKey(node.Path) == true ||
+                    snapshot.StreamParents?.Keys.Any(k => string.Equals(k, node.Path, StringComparison.OrdinalIgnoreCase)) == true)
+                {
+                    node.ParentPath = parent ?? string.Empty;
+                    totalParentsRestored++;
+                }
+            }
+
             // Recurse into children
             if (node.Children != null)
             {
                 foreach (var child in node.Children)
                 {
-                    RestoreHierarchyRules(child, snapshot, ref totalStreamsRestored, ref totalRulesRestored);
+                    RestoreHierarchyData(child, snapshot, ref totalStreamsRestored, ref totalRulesRestored, ref totalParentsRestored);
                 }
             }
         }
@@ -993,9 +1145,9 @@ namespace PerforceStreamManager.ViewModels
         }
 
         /// <summary>
-        /// Recursively stores original rules for a stream node and all its children
+        /// Recursively stores original rules and parent info for a stream node and all its children
         /// </summary>
-        private void StoreOriginalRulesRecursive(StreamNode node)
+        private void StoreOriginalDataRecursive(StreamNode node)
         {
             if (node == null) return;
 
@@ -1004,10 +1156,13 @@ namespace PerforceStreamManager.ViewModels
                 .Select(r => new StreamRule(r.Type, r.Path, r.RemapTarget, r.SourceStream))
                 .ToList();
 
+            // Store the original parent path for this stream
+            _originalParentsPerStream[node.Path] = string.IsNullOrEmpty(node.ParentPath) ? null : node.ParentPath;
+
             // Recurse into children
             foreach (var child in node.Children)
             {
-                StoreOriginalRulesRecursive(child);
+                StoreOriginalDataRecursive(child);
             }
         }
 

@@ -24,6 +24,11 @@ namespace PerforceStreamManager.Models
         public StreamNode? Parent { get; set; }
 
         /// <summary>
+        /// Full depot path of the parent stream (null or empty for mainline streams)
+        /// </summary>
+        public string ParentPath { get; set; } = string.Empty;
+
+        /// <summary>
         /// Child stream nodes
         /// </summary>
         public List<StreamNode> Children { get; set; }

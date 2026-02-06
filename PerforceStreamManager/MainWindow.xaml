@@ -127,19 +127,52 @@
             <!-- Rules Display -->
             <GroupBox Grid.Column="2" Header="Stream Rules" Margin="5">
                 <DockPanel>
+                    <!-- Parent Stream Display -->
+                    <Border DockPanel.Dock="Top"
+                            Margin="5,5,5,0"
+                            Padding="8"
+                            Background="#F5F5F5"
+                            BorderBrush="#CCCCCC"
+                            BorderThickness="1"
+                            CornerRadius="3">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="Parent Stream:"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,10,0"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding SelectedStreamParentPath, TargetNullValue='(none - mainline)', FallbackValue='(select a stream)'}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding SelectedStreamParentPath}"/>
+                            <Button Grid.Column="2"
+                                    Content="Change..."
+                                    Command="{Binding ChangeParentCommand}"
+                                    Style="{StaticResource CustomButtonStyle}"
+                                    MinWidth="80"
+                                    Margin="10,0,0,0"/>
+                        </Grid>
+                    </Border>
+
                     <!-- View Mode Buttons -->
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="5">
-                        <RadioButton Content="Local" 
-                                     IsChecked="{Binding IsLocalViewMode}" 
-                                     GroupName="ViewMode" 
+                        <RadioButton Content="Local"
+                                     IsChecked="{Binding IsLocalViewMode}"
+                                     GroupName="ViewMode"
                                      Margin="5"/>
-                        <RadioButton Content="Inherited" 
-                                     IsChecked="{Binding IsInheritedViewMode}" 
-                                     GroupName="ViewMode" 
+                        <RadioButton Content="Inherited"
+                                     IsChecked="{Binding IsInheritedViewMode}"
+                                     GroupName="ViewMode"
                                      Margin="5"/>
-                        <RadioButton Content="All" 
-                                     IsChecked="{Binding IsAllViewMode}" 
-                                     GroupName="ViewMode" 
+                        <RadioButton Content="All"
+                                     IsChecked="{Binding IsAllViewMode}"
+                                     GroupName="ViewMode"
                                      Margin="5"/>
                     </StackPanel>
                     
